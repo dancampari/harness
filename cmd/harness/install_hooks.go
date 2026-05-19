@@ -257,17 +257,36 @@ func installCodexHooks() error {
 	path := "AGENTS.md"
 	addendum := codexAddendum(harnessInvocation())
 	if existing, err := os.ReadFile(path); err == nil {
-		if strings.Contains(string(existing), "## Harness Gate") {
+		text := string(existing)
+		if strings.Contains(text, "<!-- harness-agent-protocol-v2 -->") {
 			fmt.Println("  OK Codex: AGENTS.md already contains Harness Gate")
 			return nil
 		}
-		addendum = string(existing) + "\n\n" + addendum
+		if strings.Contains(text, "## Harness Gate") {
+			addendum = replaceMarkdownSection(text, "## Harness Gate", addendum)
+		} else {
+			addendum = text + "\n\n" + addendum
+		}
 	}
 	if err := os.WriteFile(path, []byte(addendum), 0o644); err != nil {
 		return err
 	}
 	fmt.Println("  OK Codex references installed:", path)
 	return nil
+}
+
+func replaceMarkdownSection(source, heading, replacement string) string {
+	start := strings.Index(source, heading)
+	if start < 0 {
+		return source + "\n\n" + replacement
+	}
+	afterStart := start + len(heading)
+	nextRel := strings.Index(source[afterStart:], "\n## ")
+	if nextRel < 0 {
+		return strings.TrimSpace(source[:start]) + "\n\n" + replacement
+	}
+	end := afterStart + nextRel
+	return strings.TrimSpace(source[:start]) + "\n\n" + replacement + "\n\n" + strings.TrimSpace(source[end:])
 }
 
 func installCursorHooks() error {
@@ -313,24 +332,44 @@ func harnessInvocation() string {
 
 func codexAddendum(invoke string) string {
 	return `## Harness Gate
+<!-- harness-agent-protocol-v2 -->
 
-This project uses Harness Engineering. After any feature, PR, or development
-phase, you MUST follow this protocol:
+This project uses Harness Engineering. You MUST call Harness functions
+autonomously through the CLI commands below. Do not ask the user to run Harness
+for normal QA, status, or score checks.
+
+Harness function calls:
+
+- harness.status: ` + "`" + invoke + ` sprint status` + "`" + `
+- harness.start_sprint: ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+- harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+- harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
+- harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
+- harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
+
+Autonomous protocol:
 
 1. Read .harness/progress.md to recover context from previous sessions.
 2. Read .harness/spec.md for the global product spec.
-3. If starting a new sprint, run: ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
-4. Fill in the contract at .harness/contracts/sprint-NNN.md with:
+3. Read .harness/agent-protocol.md for the current Harness function contract.
+4. Run ` + "`" + invoke + ` sprint status` + "`" + ` before starting implementation.
+5. If no active sprint contract exists, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+   and fill in the contract at .harness/contracts/sprint-NNN.md with:
    - Deliverables (files + symbols expected)
    - Acceptance Criteria (with thresholds 1-10)
    - Constraints (forbidden imports, complexity limits)
-5. Implement the feature.
-6. Run: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
-7. Read .harness/reports/latest.json. If score < 80 or any high/critical
-   findings exist, iterate before declaring the task complete.
-8. Run: ` + "`" + invoke + ` sprint score` + "`" + ` to consolidate and update progress.md.
+6. Implement the feature.
+7. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+   without waiting for the user.
+8. Read .harness/reports/latest.json. If the verdict is FAIL or any
+   high/critical findings exist, fix them and rerun QA.
+9. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the task complete.
 
-Never declare a task done without a passing QA verdict from the harness.
+Only ask the user for product decisions, acceptance-criteria changes, dependency
+installation approval when it changes the project stack, or visual baseline
+approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
+
+Never declare a task done without a passing QA verdict from Harness.
 `
 }
 
@@ -343,13 +382,16 @@ alwaysApply: true
 This project uses Harness Engineering. Always:
 
 1. On session start, read .harness/progress.md and .harness/spec.md.
-2. Before implementing a feature, ensure a contract exists at
+2. Read .harness/agent-protocol.md. It defines the Harness functions you must
+   call autonomously through CLI commands.
+3. Before implementing a feature, ensure a contract exists at
    .harness/contracts/sprint-NNN.md. If not, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
    and fill it in.
-3. After implementing, run ` + "`" + invoke + ` sprint qa` + "`" + ` in the integrated terminal.
-4. Process .harness/reports/latest.json. Iterate on findings before
+4. After implementing, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` in the integrated terminal
+   without asking the user to run it.
+5. Process .harness/reports/latest.json. Iterate on findings before
    marking the task complete.
-5. Run ` + "`" + invoke + ` sprint score` + "`" + ` to update progress.md.
+6. Run ` + "`" + invoke + ` sprint score` + "`" + ` to update progress.md.
 
 Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajectory of the project.
 `

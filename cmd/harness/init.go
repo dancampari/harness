@@ -79,6 +79,9 @@ func runInit(opts initOptions) error {
 	if err := writeTemplate(filepath.Join(root, "progress.md"), progressTemplate); err != nil {
 		return err
 	}
+	if err := writeTemplate(filepath.Join(root, "agent-protocol.md"), agentProtocolTemplate(harnessInvocation())); err != nil {
+		return err
+	}
 
 	db, err := memory.Open(filepath.Join(root, "memory.db"))
 	if err != nil {
@@ -173,3 +176,41 @@ in Git, and read by every CLI as the first source of truth when resuming work.
 
 <!-- harness append below -->
 `
+
+func agentProtocolTemplate(invoke string) string {
+	return `# Harness Agent Protocol
+
+This file is for Codex, Claude Code, Cursor, and any other coding CLI working
+in this repository.
+
+The agent MUST call Harness functions autonomously through the public Harness
+CLI. Do not ask the user to run Harness commands for normal QA, scoring, or
+status checks.
+
+Harness functions:
+
+| Function | Required CLI call | When the agent calls it |
+|---|---|---|
+| harness.status | ` + "`" + invoke + ` sprint status` + "`" + ` | At session start and before final response |
+| harness.start_sprint | ` + "`" + invoke + ` sprint new "<goal>"` + "`" + ` | When no active sprint contract exists |
+| harness.qa | ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` | After meaningful code changes and before completion |
+| harness.score | ` + "`" + invoke + ` sprint score` + "`" + ` | After QA has produced the final verdict |
+| harness.doctor | ` + "`" + invoke + ` doctor` + "`" + ` | When a required sensor/tool is missing |
+| harness.terminal | ` + "`" + invoke + ` run --resume` + "`" + ` | When the user wants the live terminal dashboard |
+
+Autonomy rules:
+
+1. Read .harness/progress.md, .harness/spec.md, and this file at session
+   start.
+2. Create or update the sprint contract before implementing a feature.
+3. Run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` without waiting for the user after
+   meaningful code changes.
+4. Read .harness/reports/latest.json after QA. Fix high/critical findings and
+   rerun QA.
+5. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the work complete.
+6. Only ask the user for decisions Harness cannot make deterministically:
+   product intent, changing acceptance criteria, installing missing project
+   tools when that changes the app stack, or accepting visual baselines with
+   ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
+`
+}

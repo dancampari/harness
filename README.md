@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.2
+npx github:dancampari/harness#v0.3.3
 ```
 
 It detects the project, creates `.harness/`, installs references for Codex,
@@ -28,10 +28,10 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.2 --yes
-npx github:dancampari/harness#v0.3.2 --cli codex --yes
-npx github:dancampari/harness#v0.3.2 --cli claude --yes
-npx github:dancampari/harness#v0.3.2 --cli cursor --yes
+npx github:dancampari/harness#v0.3.3 --yes
+npx github:dancampari/harness#v0.3.3 --cli codex --yes
+npx github:dancampari/harness#v0.3.3 --cli claude --yes
+npx github:dancampari/harness#v0.3.3 --cli cursor --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -51,8 +51,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.2 --yes
-npx github:dancampari/harness#v0.3.2 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.3 --yes
+npx github:dancampari/harness#v0.3.3 sprint new "implement user auth"
 ```
 
 Edit the generated contract:
@@ -64,10 +64,10 @@ Edit the generated contract:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.2 sprint qa
-npx github:dancampari/harness#v0.3.2 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.2 sprint score
-npx github:dancampari/harness#v0.3.2 run --resume
+npx github:dancampari/harness#v0.3.3 sprint qa
+npx github:dancampari/harness#v0.3.3 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.3 sprint score
+npx github:dancampari/harness#v0.3.3 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -92,22 +92,33 @@ After bootstrap, the user normally interacts only to approve intent:
 - review and accept the first screenshot baseline;
 - inspect reports when QA fails.
 
-Codex, Claude Code, and Cursor do not call Go functions directly. Harness is a
-CLI. Integrations install instructions or hooks that tell the coding tool to run
-shell commands such as:
+Codex, Claude Code, and Cursor MUST call Harness functions autonomously after
+bootstrap. The public function interface is the Harness CLI. In other words,
+the agent function call is a shell command, because external coding CLIs cannot
+call in-process Go functions inside another binary.
+
+The generated `.harness/agent-protocol.md`, `AGENTS.md`,
+`.claude/settings.json`, and `.cursor/rules/harness.mdc` tell the coding tool
+to call these functions itself:
 
 ```bash
-harness sprint qa
+harness sprint status
+harness sprint new "<goal>"
+harness sprint qa --format=json
 harness sprint score
+harness doctor
 ```
+
+The user should not need to say "run Harness" after every task. The installed
+agent references make that part of the coding agent's operating protocol.
 
 Integration behavior:
 
 | Tool | Installed reference | How Harness is triggered |
 |---|---|---|
 | Codex | `AGENTS.md` Harness Gate | Codex is instructed to run Harness after meaningful changes |
-| Claude Code | `.claude/settings.json` hooks | Claude Code hooks run Harness on stop and before commits |
-| Cursor | `.cursor/rules/harness.mdc` | Cursor receives an always-on rule to run Harness |
+| Claude Code | `.claude/settings.json` hooks | Claude Code hooks run Harness automatically on stop and before commits |
+| Cursor | `.cursor/rules/harness.mdc` | Cursor receives an always-on rule to run Harness autonomously |
 | Git | `.git/hooks/pre-push` | Safety-net report before push, non-blocking |
 
 Harness reports only. It does not block commits or pushes by default; the agent
@@ -236,6 +247,7 @@ Harness creates this local directory:
 .harness/
   config.yaml
   spec.md
+  agent-protocol.md
   progress.md
   contracts/
   evaluations/
