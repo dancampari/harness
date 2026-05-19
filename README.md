@@ -294,6 +294,25 @@ go build -o dist/harness .
 npm pack
 ```
 
+Local Windows test before installing from npm/GitHub:
+
+```powershell
+cd harness
+.\scripts\link-local.ps1
+harness --version
+harness doctor
+```
+
+If `harness` calls an older package, inspect command resolution with:
+
+```powershell
+Get-Command harness -All
+```
+
+The local link script removes only stale `@dancampari/agent-harness-kit`
+shims, builds `dist/harness.exe`, and runs `npm link` so `harness` points to
+this checkout.
+
 Deterministic adapters are welcome. Adapters must not call LLMs.
 
 ## License
