@@ -17,9 +17,13 @@ func newRunCmd() *cobra.Command {
 
 Use --resume to load existing state from .harness/.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return tui.Run(".harness", resume)
+			return runTUI(resume)
 		},
 	}
 	cmd.Flags().BoolVar(&resume, "resume", false, "resume from existing state")
 	return cmd
+}
+
+func runTUI(resume bool) error {
+	return tui.Run(".harness", resume)
 }

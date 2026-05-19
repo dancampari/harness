@@ -14,17 +14,24 @@ quality evidence visible and conservative.
 
 ## Install With npx
 
-Current public GitHub install:
+Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.1 --version
+npx github:dancampari/harness#v0.3.2
 ```
 
-Initialize a project:
+It detects the project, creates `.harness/`, installs references for Codex,
+Claude Code, Cursor, or all three, runs `doctor`, and prints the command to
+open the live Harness terminal.
+
+For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.1 init --install-hooks
+npx github:dancampari/harness#v0.3.2 --yes
+npx github:dancampari/harness#v0.3.2 --cli codex --yes
+npx github:dancampari/harness#v0.3.2 --cli claude --yes
+npx github:dancampari/harness#v0.3.2 --cli cursor --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -33,7 +40,7 @@ command is:
 
 ```bash
 npx @dancampari/harness@latest --version
-npx @dancampari/harness@latest init --install-hooks
+npx @dancampari/harness@latest
 ```
 
 The npm wrapper first looks for a local packaged binary, then tries to download
@@ -44,9 +51,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.1 init --install-hooks
-npx github:dancampari/harness#v0.3.1 doctor
-npx github:dancampari/harness#v0.3.1 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.2 --yes
+npx github:dancampari/harness#v0.3.2 sprint new "implement user auth"
 ```
 
 Edit the generated contract:
@@ -58,10 +64,10 @@ Edit the generated contract:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.1 sprint qa
-npx github:dancampari/harness#v0.3.1 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.1 sprint score
-npx github:dancampari/harness#v0.3.1 run --resume
+npx github:dancampari/harness#v0.3.2 sprint qa
+npx github:dancampari/harness#v0.3.2 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.2 sprint score
+npx github:dancampari/harness#v0.3.2 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -69,14 +75,22 @@ missing baseline is a failure by design.
 
 ## Does The User Interact?
 
-Yes, but only at the control points where human intent matters.
+Very little.
 
-The user normally interacts with Harness to:
+Default bootstrap behavior:
 
-- initialize the repo and choose the coding CLI integration;
-- write or approve the sprint contract;
+- If Codex, Claude Code, or Cursor markers already exist, Harness detects them
+  and installs only the matching references.
+- If no marker exists and the command is running in a terminal, Harness asks
+  one question: Codex, Claude Code, Cursor, all, or none.
+- If no marker exists and the command is non-interactive, `--yes` installs all
+  references so the setup never stalls.
+
+After bootstrap, the user normally interacts only to approve intent:
+
+- fill or approve the sprint contract;
 - review and accept the first screenshot baseline;
-- inspect `doctor`, QA reports, trends, and final score.
+- inspect reports when QA fails.
 
 Codex, Claude Code, and Cursor do not call Go functions directly. Harness is a
 CLI. Integrations install instructions or hooks that tell the coding tool to run
@@ -239,6 +253,8 @@ Harness creates this local directory:
 ## Commands
 
 ```text
+harness                         one-command setup
+harness setup [--yes] [--cli auto|codex|claude|cursor|all|none] [--start]
 harness init [--force] [--install-hooks] [--cli auto|codex|claude|cursor|all|none]
 harness install-hooks [--interactive] [--cli auto|codex|claude|cursor|all|none]
 harness doctor

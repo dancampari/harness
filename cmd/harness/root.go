@@ -1,20 +1,29 @@
 // Package harness contains the CLI command tree for the harness binary.
 package harness
 
-import (
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 // Execute runs the root command. Called from main.
 func Execute(version string) error {
+	var setup setupOptions
 	root := &cobra.Command{
 		Use:     "harness",
-		Short:   "Harness Engineering agent — stack-agnostic, deterministic, offline",
+		Short:   "Harness Engineering agent - stack-agnostic, deterministic, offline",
 		Long:    longDescription,
 		Version: version,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSetup(setup)
+		},
 	}
 
+	root.Flags().StringVar(&setup.CLI, "cli", "auto", "coding CLI to configure: auto|codex|claude|cursor|all|none")
+	root.Flags().BoolVar(&setup.Force, "force", false, "overwrite existing .harness/")
+	root.Flags().BoolVarP(&setup.Yes, "yes", "y", false, "run setup with no prompts; installs all agent references if none are detected")
+	root.Flags().BoolVar(&setup.StartTUI, "start", false, "launch the live TUI after setup")
+
 	root.AddCommand(
+		newSetupCmd(),
 		newInitCmd(),
 		newSpecCmd(),
 		newSprintCmd(),
@@ -36,17 +45,17 @@ Sits next to your coding CLI (Claude Code, Codex, Cursor) and validates each
 sprint's contract against the actual diff using independent sensors:
 linters, type checkers, tests, coverage, complexity, architecture, E2E.
 
-Reports only — never blocks. The CLI or human decides what to do with the
-score. Maintains per-project memory in .harness/progress.md (narrative,
-versionable) and .harness/memory.db (indexed history for trend analysis).
+Run ` + "`harness`" + ` with no subcommand for the one-command bootstrap. It detects
+the project, initializes .harness/, installs Codex/Claude/Cursor references,
+prints sensor status, and tells you how to open the live terminal dashboard.
 
 Workflow:
-  harness init                  # one-time setup
-  harness sprint new "<goal>"   # creates contracts/sprint-NNN.md template
+  harness                         # one-command setup
+  harness sprint new "<goal>"     # creates contracts/sprint-NNN.md template
   # ... CLI writes contract, then implements the feature ...
-  harness sprint qa             # runs Evaluator (isolated subprocess)
-  harness sprint score          # consolidates verdict + updates progress.md
-  harness doctor                # checks active dimensions and sensor tooling
-  harness run --resume          # live TUI of the whole pipeline
+  harness sprint qa               # runs Evaluator (isolated subprocess)
+  harness sprint score            # consolidates verdict + updates progress.md
+  harness doctor                  # checks active dimensions and sensor tooling
+  harness run --resume            # live TUI of the whole pipeline
 
 Use 'harness <command> --help' for details.`

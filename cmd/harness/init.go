@@ -45,6 +45,7 @@ type initOptions struct {
 	Force        bool
 	CLI          string
 	InstallHooks bool
+	Quiet        bool
 }
 
 func runInit(opts initOptions) error {
@@ -115,10 +116,13 @@ func runInit(opts initOptions) error {
 		}
 	}
 
-	fmt.Println("  Next steps:")
-	fmt.Println("    1. Edit .harness/spec.md with your product spec")
-	fmt.Println("    2. harness install-hooks --interactive    # choose Codex, Claude Code, or Cursor")
-	fmt.Println("    3. harness sprint new \"first goal\"")
+	if !opts.Quiet {
+		invoke := harnessInvocation()
+		fmt.Println("  Next steps:")
+		fmt.Println("    1. Edit .harness/spec.md with your product spec")
+		fmt.Printf("    2. %s install-hooks --interactive    # choose Codex, Claude Code, or Cursor\n", invoke)
+		fmt.Printf("    3. %s sprint new \"first goal\"\n", invoke)
+	}
 	return nil
 }
 

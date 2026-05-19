@@ -102,9 +102,14 @@ func resolveHookTargets(opts installHookOptions, project detect.ProjectInfo) ([]
 			if err != nil {
 				return nil, err
 			}
+			if normalizeCLI(picked) == "auto" {
+				fmt.Println("  No existing CLI markers found; installing all agent references.")
+				return []string{"claude", "codex", "cursor"}, nil
+			}
 			return resolveHookTargets(installHookOptions{CLI: picked}, project)
 		}
-		return nil, fmt.Errorf("no coding CLI detected; rerun with --cli codex, --cli claude, --cli cursor, or --interactive")
+		fmt.Println("  No coding CLI detected in non-interactive mode; installing all agent references.")
+		return []string{"claude", "codex", "cursor"}, nil
 	case "all":
 		return []string{"claude", "codex", "cursor"}, nil
 	case "none", "git":
@@ -145,7 +150,11 @@ func promptHookTarget(project detect.ProjectInfo) (string, error) {
 	}
 	fmt.Println()
 	fmt.Println("Which coding CLI will implement code in this repo?")
-	fmt.Println("  1) Auto-detect existing markers")
+	if len(project.CodingCLIs) > 0 {
+		fmt.Println("  1) Auto-detect existing markers")
+	} else {
+		fmt.Println("  1) Auto / all references")
+	}
 	fmt.Println("  2) Codex")
 	fmt.Println("  3) Claude Code")
 	fmt.Println("  4) Cursor")
