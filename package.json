@@ -1,0 +1,54 @@
+{
+  "name": "@dancampari/harness",
+  "version": "0.3.0",
+  "description": "Stack-agnostic local QA harness for AI-assisted development.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "harness": "npm/bin/harness.js"
+  },
+  "scripts": {
+    "postinstall": "node npm/install.js",
+    "test": "go test ./...",
+    "build": "go build -o dist/harness ."
+  },
+  "files": [
+    "cmd",
+    "docs",
+    "internal",
+    "npm",
+    "main.go",
+    "go.mod",
+    "go.sum",
+    "README.md",
+    "ROADMAP.md",
+    "install.sh"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dancampari/harness.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dancampari/harness/issues"
+  },
+  "homepage": "https://github.com/dancampari/harness#readme",
+  "keywords": [
+    "harness",
+    "coding-agents",
+    "codex",
+    "claude-code",
+    "cursor",
+    "qa",
+    "playwright"
+  ],
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/dancampari"
+  }
+}

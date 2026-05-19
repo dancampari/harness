@@ -1,0 +1,22 @@
+# Build output
+/harness
+/harness.exe
+/dist/
+
+# Go workspace
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local test artifacts
+/tmp/
+*.test
+*.out
+coverage.txt

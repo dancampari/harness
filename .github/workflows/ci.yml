@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify formatting
+        shell: pwsh
+        run: |
+          $files = gofmt -l .
+          if ($files) {
+            $files
+            throw "gofmt reported unformatted files"
+          }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Build CLI
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          go build -ldflags "-X main.version=0.3.0" -o .\dist\harness.exe .
+
+      - name: Validate npm package
+        shell: pwsh
+        run: |
+          $packOutput = npm pack
+          $tgz = Resolve-Path (($packOutput | Select-Object -Last 1).Trim())
+          $cache = Join-Path $env:RUNNER_TEMP "npm-cache"
+          $cwd = Join-Path $env:RUNNER_TEMP "npx-cwd"
+          New-Item -ItemType Directory -Force -Path $cwd | Out-Null
+          Push-Location $cwd
+          try {
+            npm exec --yes --cache "$cache" --package "$tgz" -- harness --version
+          } finally {
+            Pop-Location
+          }
