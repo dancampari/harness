@@ -16,6 +16,7 @@ func newInitCmd() *cobra.Command {
 	var force bool
 	var cli string
 	var installHooks bool
+	var skills string
 
 	cmd := &cobra.Command{
 		Use:   "init",
@@ -27,25 +28,32 @@ func newInitCmd() *cobra.Command {
   - contracts/, evaluations/, screenshots/, reports/ (empty dirs)
   - memory.db (SQLite index, initialized)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			skillsMode := normalizeSkillsMode(skills)
+			if skillsMode != "on" && skillsMode != "off" {
+				return fmt.Errorf("unknown skills mode %q; use on|off", skills)
+			}
 			return runInit(initOptions{
-				Force:        force,
-				CLI:          cli,
-				InstallHooks: installHooks,
+				Force:         force,
+				CLI:           cli,
+				InstallHooks:  installHooks,
+				InstallSkills: skillsMode == "on",
 			})
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing .harness/")
 	cmd.Flags().StringVar(&cli, "cli", "auto", "coding CLI to configure: auto|codex|claude|cursor|all|none")
+	cmd.Flags().StringVar(&skills, "skills", "off", "install contract automation skills: on|off")
 	cmd.Flags().BoolVar(&installHooks, "install-hooks", false, "install coding CLI references during init")
 	return cmd
 }
 
 type initOptions struct {
-	Force        bool
-	CLI          string
-	InstallHooks bool
-	Quiet        bool
+	Force         bool
+	CLI           string
+	InstallHooks  bool
+	InstallSkills bool
+	Quiet         bool
 }
 
 func runInit(opts initOptions) error {
@@ -79,8 +87,13 @@ func runInit(opts initOptions) error {
 	if err := writeTemplate(filepath.Join(root, "progress.md"), progressTemplate); err != nil {
 		return err
 	}
-	if err := writeTemplate(filepath.Join(root, "agent-protocol.md"), agentProtocolTemplate(harnessInvocation())); err != nil {
+	if err := writeTemplate(filepath.Join(root, "agent-protocol.md"), agentProtocolTemplate(harnessInvocation(), opts.InstallSkills)); err != nil {
 		return err
+	}
+	if opts.InstallSkills {
+		if err := runInstallSkills(root); err != nil {
+			return err
+		}
 	}
 
 	db, err := memory.Open(filepath.Join(root, "memory.db"))
@@ -112,6 +125,7 @@ func runInit(opts initOptions) error {
 	if shouldInstallHooks {
 		if err := runInstallHooks(installHookOptions{
 			CLI:         opts.CLI,
+			Skills:      boolSkillsMode(opts.InstallSkills),
 			Interactive: isTerminal(os.Stdin) && opts.CLI == "auto",
 			InstallGit:  true,
 		}); err != nil {
@@ -177,7 +191,7 @@ in Git, and read by every CLI as the first source of truth when resuming work.
 <!-- harness append below -->
 `
 
-func agentProtocolTemplate(invoke string) string {
+func agentProtocolTemplate(invoke string, skillsEnabled bool) string {
 	return `# Harness Agent Protocol
 
 This file is for Codex, Claude Code, Cursor, and any other coding CLI working
@@ -197,6 +211,8 @@ Harness functions:
 | harness.score | ` + "`" + invoke + ` sprint score` + "`" + ` | After QA has produced the final verdict |
 | harness.doctor | ` + "`" + invoke + ` doctor` + "`" + ` | When a required sensor/tool is missing |
 | harness.terminal | ` + "`" + invoke + ` run --resume` + "`" + ` | When the user wants the live terminal dashboard |
+
+` + contractAutomationProtocol(skillsEnabled) + `
 
 Autonomy rules:
 

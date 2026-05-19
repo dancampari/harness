@@ -111,6 +111,27 @@ Prove evaluator runs in an isolated subprocess.
 	}
 }
 
+func TestSetupYesInstallsContractSkillsAndAgentReferences(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+	writeIntegrationFile(t, filepath.Join(root, "package.json"), `{"name":"setup-skills"}`)
+
+	runHarness(t, exe, root, "setup", "--yes", "--cli", "codex", "--scope", "project")
+
+	assertFileContains(t,
+		filepath.Join(root, ".harness", "skills", "contract-authoring", "SKILL.md"),
+		"Harness Contract Authoring",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "AGENTS.md"),
+		".harness/skills/contract-authoring/SKILL.md",
+	)
+	assertFileContains(t,
+		filepath.Join(root, ".harness", "setup.json"),
+		`"contract_skills_enabled": true`,
+	)
+}
+
 func buildHarness(t *testing.T) string {
 	t.Helper()
 	exe := filepath.Join(t.TempDir(), "harness")
@@ -143,6 +164,17 @@ func writeIntegrationFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func assertFileContains(t *testing.T, path, expected string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if !strings.Contains(string(content), expected) {
+		t.Fatalf("expected %s to contain %q\n%s", path, expected, content)
 	}
 }
 

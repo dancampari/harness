@@ -1,0 +1,222 @@
+package harness
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/cobra"
+)
+
+func newSkillsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "skills",
+		Short: "Manage Harness agent skill documents",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "install",
+		Short: "Install automated contract-authoring skills into .harness/",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runInstallSkills(".harness")
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show whether automated contract-authoring skills are installed",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if skillsInstalled(".harness") {
+				fmt.Println("Contract automation skills: installed")
+			} else {
+				fmt.Println("Contract automation skills: not installed")
+			}
+			return nil
+		},
+	})
+	return cmd
+}
+
+func runInstallSkills(root string) error {
+	if root == "" {
+		root = ".harness"
+	}
+	if err := os.MkdirAll(filepath.Join(root, "skills", "contract-authoring", "references"), 0o755); err != nil {
+		return err
+	}
+	files := map[string]string{
+		filepath.Join(root, "skills", "contract-authoring", "SKILL.md"):                             contractAuthoringSkill,
+		filepath.Join(root, "skills", "contract-authoring", "references", "sprint-planning.md"):     sprintPlanningReference,
+		filepath.Join(root, "skills", "contract-authoring", "references", "contract-quality.md"):    contractQualityReference,
+		filepath.Join(root, "skills", "contract-authoring", "references", "acceptance-examples.md"): acceptanceExamplesReference,
+	}
+	for path, content := range files {
+		if err := writeTemplate(path, content); err != nil {
+			return err
+		}
+	}
+	if err := ensureAgentProtocolMode(root, true); err != nil {
+		return err
+	}
+	fmt.Println("  OK contract automation skills installed: .harness/skills/contract-authoring")
+	return nil
+}
+
+func skillsInstalled(root string) bool {
+	_, err := os.Stat(filepath.Join(root, "skills", "contract-authoring", "SKILL.md"))
+	return err == nil
+}
+
+func normalizeSkillsMode(value string) string {
+	v := strings.ToLower(strings.TrimSpace(value))
+	switch v {
+	case "", "detect":
+		return "auto"
+	case "true", "yes", "y", "sim", "s", "enable", "enabled", "1":
+		return "on"
+	case "false", "no", "n", "nao", "disable", "disabled", "0", "none":
+		return "off"
+	}
+	return v
+}
+
+func ensureAgentProtocolMode(root string, skillsEnabled bool) error {
+	path := filepath.Join(root, "agent-protocol.md")
+	content := agentProtocolTemplate(harnessInvocation(), skillsEnabled)
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		return os.WriteFile(path, []byte(content), 0o644)
+	}
+	text := string(existing)
+	hasSkillRef := strings.Contains(text, ".harness/skills/contract-authoring/SKILL.md")
+	if skillsEnabled && hasSkillRef {
+		return nil
+	}
+	if !skillsEnabled && !hasSkillRef {
+		return nil
+	}
+	if strings.Contains(text, "## Harness Agent Protocol") {
+		return os.WriteFile(path, []byte(content), 0o644)
+	}
+	return os.WriteFile(path, []byte(strings.TrimSpace(text)+"\n\n"+contractAutomationProtocol(skillsEnabled)+"\n"), 0o644)
+}
+
+const contractAuthoringSkill = `---
+name: harness-contract-authoring
+description: Use when an agent receives a user request in a Harness repository and must decompose it into small sprints, create or update .harness/contracts/sprint-NNN.md, or repair a weak contract before implementation.
+---
+
+# Harness Contract Authoring
+
+Use this skill before implementing a user request.
+
+## Workflow
+
+1. Read .harness/spec.md, .harness/progress.md, and .harness/agent-protocol.md.
+2. Run: harness sprint status.
+3. Decide the smallest sprint that can produce visible, testable progress.
+4. Run: harness sprint new "<small goal>" when a new contract is needed.
+5. Fill the generated contract completely before implementation.
+6. Keep the contract honest: do not remove important acceptance criteria to make QA pass.
+7. Implement only the current sprint.
+8. Run: harness sprint qa --format=json after meaningful changes.
+9. Read .harness/reports/latest.json, fix findings, rerun QA, then run: harness sprint score.
+
+## Required Contract Properties
+
+- Goal is one small outcome, not a whole product.
+- Deliverables name concrete files, routes, commands, schemas, or exported symbols.
+- Acceptance criteria are observable and testable by sensors or direct inspection.
+- Constraints include architecture boundaries, forbidden imports, complexity limits, security rules, or visual requirements when relevant.
+- Ambiguities are recorded as assumptions only when they do not change product intent.
+
+## References
+
+- Sprint sizing: references/sprint-planning.md
+- Contract quality checklist: references/contract-quality.md
+- Examples of weak and strong criteria: references/acceptance-examples.md
+`
+
+const sprintPlanningReference = `# Sprint Planning
+
+Convert the user's prompt into the smallest useful sprint.
+
+Prefer one sprint when the request is narrow. Split into multiple sprints only
+when a single pass would mix unrelated concerns such as data model, UI, E2E,
+and migration work.
+
+Good sprint goals:
+
+- "Add appointment conflict validation in the server action and database RPC"
+- "Create the public service-selection booking step"
+- "Add QA coverage for barber availability edge cases"
+
+Bad sprint goals:
+
+- "Build the whole SaaS"
+- "Improve the app"
+- "Make everything production ready"
+
+When multiple sprints are needed, create the first sprint contract and leave a
+short plan for the next ones in .harness/progress.md after scoring.
+`
+
+const contractQualityReference = `# Contract Quality Checklist
+
+A Harness contract is viable only when another agent can implement and verify it
+without guessing product intent.
+
+Check before implementation:
+
+- Goal fits in one sprint.
+- Deliverables include concrete paths or symbols.
+- Acceptance criteria use objective language.
+- Criteria mention expected behavior, negative cases, and edge cases.
+- UI work includes responsive and visual expectations.
+- Backend work includes validation, persistence, permissions, and failure modes.
+- Security-sensitive work includes server-side enforcement.
+- Architecture constraints mention forbidden shortcuts when relevant.
+- Thresholds are not lowered to make the sprint easy.
+
+Reject and rewrite criteria like:
+
+- "Works correctly"
+- "Looks good"
+- "Refactor code"
+- "Handle errors"
+
+Replace them with observable criteria that Harness, tests, or a reviewer can
+verify.
+`
+
+const acceptanceExamplesReference = `# Acceptance Criteria Examples
+
+Weak:
+
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | Booking works | 8/10 |
+
+Strong:
+
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | Creating an appointment rejects overlapping intervals for the same barber on the server side | 10/10 |
+| 2 | The public booking flow shows only available time slots for the selected service duration and date | 8/10 |
+| 3 | Unit tests cover overlap, adjacent appointments, cancelled appointments, and timezone conversion | 8/10 |
+
+Weak:
+
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | UI looks premium | 8/10 |
+
+Strong:
+
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | Admin appointment list uses the product dark/copper palette, compact desktop spacing, and clear empty/loading/error states | 8/10 |
+| 2 | Mobile public booking uses touch-sized time chips and avoids table layouts | 8/10 |
+| 3 | Playwright covers service selection, date selection, slot selection, login gate, and success state | 8/10 |
+`

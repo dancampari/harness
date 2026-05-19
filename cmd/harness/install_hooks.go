@@ -1,7 +1,6 @@
 package harness
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +13,7 @@ import (
 
 type installHookOptions struct {
 	CLI         string
+	Skills      string
 	Interactive bool
 	InstallGit  bool
 }
@@ -21,6 +21,7 @@ type installHookOptions struct {
 func newInstallHooksCmd() *cobra.Command {
 	var only string
 	var cli string
+	var skills string
 	var interactive bool
 	var git bool
 
@@ -41,6 +42,7 @@ a guided install, or --cli codex|claude|cursor|all|none in scripts.`,
 			}
 			return runInstallHooks(installHookOptions{
 				CLI:         cli,
+				Skills:      skills,
 				Interactive: interactive,
 				InstallGit:  git,
 			})
@@ -48,6 +50,7 @@ a guided install, or --cli codex|claude|cursor|all|none in scripts.`,
 	}
 	cmd.Flags().StringVar(&only, "only", "", "deprecated: install only one: claude|codex|cursor|git")
 	cmd.Flags().StringVar(&cli, "cli", "auto", "coding CLI: auto|codex|claude|cursor|all|none")
+	cmd.Flags().StringVar(&skills, "skills", "auto", "contract automation skills: auto|on|off")
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "ask which coding CLI to configure")
 	cmd.Flags().BoolVar(&git, "git", true, "also install the git pre-push safety hook")
 	return cmd
@@ -59,15 +62,32 @@ func runInstallHooks(opts installHookOptions) error {
 	if err != nil {
 		return err
 	}
+	skillsEnabled, err := resolveHookSkills(opts.Skills)
+	if err != nil {
+		return err
+	}
+	if skillsEnabled {
+		if !skillsInstalled(".harness") {
+			if err := runInstallSkills(".harness"); err != nil {
+				return err
+			}
+		} else if err := ensureAgentProtocolMode(".harness", true); err != nil {
+			return err
+		}
+	} else if _, err := os.Stat(".harness"); err == nil {
+		if err := ensureAgentProtocolMode(".harness", false); err != nil {
+			return err
+		}
+	}
 
-	installers := map[string]func() error{
+	installers := map[string]func(bool) error{
 		"claude": installClaudeHooks,
 		"codex":  installCodexHooks,
 		"cursor": installCursorHooks,
 	}
 	for _, target := range targets {
 		fn := installers[target]
-		if err := fn(); err != nil {
+		if err := fn(skillsEnabled); err != nil {
 			return fmt.Errorf("%s: %w", target, err)
 		}
 	}
@@ -80,6 +100,19 @@ func runInstallHooks(opts installHookOptions) error {
 		fmt.Println("No Harness references installed.")
 	}
 	return nil
+}
+
+func resolveHookSkills(mode string) (bool, error) {
+	switch normalizeSkillsMode(mode) {
+	case "auto":
+		return skillsInstalled(".harness"), nil
+	case "on":
+		return true, nil
+	case "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("unknown skills mode %q; use auto|on|off", mode)
+	}
 }
 
 func resolveHookTargets(opts installHookOptions, project detect.ProjectInfo) ([]string, error) {
@@ -103,6 +136,9 @@ func resolveHookTargets(opts installHookOptions, project detect.ProjectInfo) ([]
 				return nil, err
 			}
 			if normalizeCLI(picked) == "auto" {
+				if len(project.CodingCLIs) > 0 {
+					return project.CodingCLIs, nil
+				}
 				fmt.Println("  No existing CLI markers found; installing all agent references.")
 				return []string{"claude", "codex", "cursor"}, nil
 			}
@@ -150,31 +186,31 @@ func promptHookTarget(project detect.ProjectInfo) (string, error) {
 	}
 	fmt.Println()
 	fmt.Println("Which coding CLI will implement code in this repo?")
-	if len(project.CodingCLIs) > 0 {
-		fmt.Println("  1) Auto-detect existing markers")
-	} else {
-		fmt.Println("  1) Auto / all references")
-	}
+	fmt.Println("  1) Claude Code")
 	fmt.Println("  2) Codex")
-	fmt.Println("  3) Claude Code")
-	fmt.Println("  4) Cursor")
+	fmt.Println("  3) Cursor IDE")
+	if len(project.CodingCLIs) > 0 {
+		fmt.Println("  4) Auto-detect existing markers")
+	} else {
+		fmt.Println("  4) Auto / all references")
+	}
 	fmt.Println("  5) All three")
 	fmt.Println("  6) None")
-	fmt.Print("Select [1]: ")
+	fmt.Print("Select [4]: ")
 
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	line, err := readPromptLine()
 	if err != nil {
 		return "", err
 	}
 	switch strings.TrimSpace(strings.ToLower(line)) {
-	case "", "1", "auto":
-		return "auto", nil
+	case "1", "claude", "claude code", "claude-code":
+		return "claude", nil
 	case "2", "codex":
 		return "codex", nil
-	case "3", "claude", "claude code", "claude-code":
-		return "claude", nil
-	case "4", "cursor":
+	case "3", "cursor", "cursor ide":
 		return "cursor", nil
+	case "", "4", "auto":
+		return "auto", nil
 	case "5", "all":
 		return "all", nil
 	case "6", "none", "skip":
@@ -184,8 +220,8 @@ func promptHookTarget(project detect.ProjectInfo) (string, error) {
 	}
 }
 
-func installClaudeHooks() error {
-	if err := installClaudeMemory(); err != nil {
+func installClaudeHooks(skillsEnabled bool) error {
+	if err := installClaudeMemory(skillsEnabled); err != nil {
 		return err
 	}
 	dir := ".claude"
@@ -216,14 +252,11 @@ func installClaudeHooks() error {
 	return nil
 }
 
-func installClaudeMemory() error {
+func installClaudeMemory(skillsEnabled bool) error {
 	path := "CLAUDE.md"
-	content := claudeMemory(harnessInvocation())
+	content := claudeMemory(harnessInvocation(), skillsEnabled)
 	if existing, err := os.ReadFile(path); err == nil {
 		text := string(existing)
-		if strings.Contains(text, "<!-- harness-claude-protocol-v2 -->") {
-			return nil
-		}
 		if strings.Contains(text, "## Harness Gate") {
 			content = replaceMarkdownSection(text, "## Harness Gate", content)
 		} else {
@@ -273,15 +306,11 @@ func appendClaudeHook(hooks map[string]any, event, matcher, command string) {
 	})
 }
 
-func installCodexHooks() error {
+func installCodexHooks(skillsEnabled bool) error {
 	path := "AGENTS.md"
-	addendum := codexAddendum(harnessInvocation())
+	addendum := codexAddendum(harnessInvocation(), skillsEnabled)
 	if existing, err := os.ReadFile(path); err == nil {
 		text := string(existing)
-		if strings.Contains(text, "<!-- harness-agent-protocol-v2 -->") {
-			fmt.Println("  OK Codex: AGENTS.md already contains Harness Gate")
-			return nil
-		}
 		if strings.Contains(text, "## Harness Gate") {
 			addendum = replaceMarkdownSection(text, "## Harness Gate", addendum)
 		} else {
@@ -309,13 +338,13 @@ func replaceMarkdownSection(source, heading, replacement string) string {
 	return strings.TrimSpace(source[:start]) + "\n\n" + replacement + "\n\n" + strings.TrimSpace(source[end:])
 }
 
-func installCursorHooks() error {
+func installCursorHooks(skillsEnabled bool) error {
 	dir := filepath.Join(".cursor", "rules")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	path := filepath.Join(dir, "harness.mdc")
-	if err := os.WriteFile(path, []byte(cursorRule(harnessInvocation())), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(cursorRule(harnessInvocation(), skillsEnabled)), 0o644); err != nil {
 		return err
 	}
 	fmt.Println("  OK Cursor references installed:", path)
@@ -350,9 +379,9 @@ func harnessInvocation() string {
 	return "harness"
 }
 
-func codexAddendum(invoke string) string {
+func codexAddendum(invoke string, skillsEnabled bool) string {
 	return `## Harness Gate
-<!-- harness-agent-protocol-v2 -->
+<!-- harness-agent-protocol-v3 -->
 
 This project uses Harness Engineering. You MUST call Harness functions
 autonomously through the CLI commands below. Do not ask the user to run Harness
@@ -366,6 +395,8 @@ Harness function calls:
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
+
+` + contractAutomationProtocol(skillsEnabled) + `
 
 Autonomous protocol:
 
@@ -393,9 +424,9 @@ Never declare a task done without a passing QA verdict from Harness.
 `
 }
 
-func claudeMemory(invoke string) string {
+func claudeMemory(invoke string, skillsEnabled bool) string {
 	return `## Harness Gate
-<!-- harness-claude-protocol-v2 -->
+<!-- harness-claude-protocol-v3 -->
 
 Claude Code MUST call Harness functions autonomously through the CLI commands
 below. Do not ask the user to run Harness for normal QA, status, score, or
@@ -409,6 +440,8 @@ Harness function calls:
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
+
+` + contractAutomationProtocol(skillsEnabled) + `
 
 Autonomous protocol for Claude Code:
 
@@ -427,7 +460,7 @@ baseline approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`"
 `
 }
 
-func cursorRule(invoke string) string {
+func cursorRule(invoke string, skillsEnabled bool) string {
 	return `---
 description: Harness Engineering integration
 alwaysApply: true
@@ -438,15 +471,49 @@ This project uses Harness Engineering. Always:
 1. On session start, read .harness/progress.md and .harness/spec.md.
 2. Read .harness/agent-protocol.md. It defines the Harness functions you must
    call autonomously through CLI commands.
-3. Before implementing a feature, ensure a contract exists at
+` + cursorContractAutomationProtocol(skillsEnabled) + `
+4. Before implementing a feature, ensure a contract exists at
    .harness/contracts/sprint-NNN.md. If not, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
    and fill it in.
-4. After implementing, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` in the integrated terminal
+5. After implementing, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` in the integrated terminal
    without asking the user to run it.
-5. Process .harness/reports/latest.json. Iterate on findings before
+6. Process .harness/reports/latest.json. Iterate on findings before
    marking the task complete.
-6. Run ` + "`" + invoke + ` sprint score` + "`" + ` to update progress.md.
+7. Run ` + "`" + invoke + ` sprint score` + "`" + ` to update progress.md.
 
 Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajectory of the project.
+`
+}
+
+func contractAutomationProtocol(enabled bool) string {
+	if enabled {
+		return `Contract automation skills are enabled.
+
+Before creating or editing a sprint contract, read:
+
+- .harness/skills/contract-authoring/SKILL.md
+
+Use that skill to decompose the user's prompt into small sprints, create the
+current sprint contract, and fill the Markdown completely. Do not ask the user
+to write the contract by hand. Ask only the smallest product question when the
+request is too ambiguous to make objective acceptance criteria.`
+	}
+	return `Contract automation skills are disabled.
+
+Use Harness for QA, scoring, status, and reports, but do not invent detailed
+contracts from the user's prompt unless the user explicitly asks for that. In
+manual mode, create the template when needed and let the user author or approve
+the contract.`
+}
+
+func cursorContractAutomationProtocol(enabled bool) string {
+	if enabled {
+		return `3. Contract automation skills are enabled. Before creating or editing a
+   sprint contract, read .harness/skills/contract-authoring/SKILL.md. Use it to
+   decompose the user's prompt and fill the contract automatically.
+`
+	}
+	return `3. Contract automation skills are disabled. Do not invent detailed sprint
+   contracts unless the user explicitly asks for automation.
 `
 }
