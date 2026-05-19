@@ -28,7 +28,7 @@ func newInstallHooksCmd() *cobra.Command {
 		Use:   "install-hooks",
 		Short: "Install integration references for Claude Code, Codex, or Cursor",
 		Long: `Installs the Harness references for the coding CLI used in this repo:
-  - Claude Code:  .claude/settings.json hooks
+  - Claude Code:  CLAUDE.md instructions + .claude/settings.json hooks
   - Codex:        AGENTS.md instructions
   - Cursor:       .cursor/rules/harness.mdc
 
@@ -185,6 +185,9 @@ func promptHookTarget(project detect.ProjectInfo) (string, error) {
 }
 
 func installClaudeHooks() error {
+	if err := installClaudeMemory(); err != nil {
+		return err
+	}
 	dir := ".claude"
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -209,8 +212,25 @@ func installClaudeHooks() error {
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		return err
 	}
-	fmt.Println("  OK Claude Code references installed:", path)
+	fmt.Println("  OK Claude Code references installed: CLAUDE.md,", path)
 	return nil
+}
+
+func installClaudeMemory() error {
+	path := "CLAUDE.md"
+	content := claudeMemory(harnessInvocation())
+	if existing, err := os.ReadFile(path); err == nil {
+		text := string(existing)
+		if strings.Contains(text, "<!-- harness-claude-protocol-v2 -->") {
+			return nil
+		}
+		if strings.Contains(text, "## Harness Gate") {
+			content = replaceMarkdownSection(text, "## Harness Gate", content)
+		} else {
+			content = text + "\n\n" + content
+		}
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
 }
 
 func objectValue(parent map[string]any, key string) map[string]any {
@@ -370,6 +390,40 @@ installation approval when it changes the project stack, or visual baseline
 approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
 
 Never declare a task done without a passing QA verdict from Harness.
+`
+}
+
+func claudeMemory(invoke string) string {
+	return `## Harness Gate
+<!-- harness-claude-protocol-v2 -->
+
+Claude Code MUST call Harness functions autonomously through the CLI commands
+below. Do not ask the user to run Harness for normal QA, status, score, or
+doctor checks.
+
+Harness function calls:
+
+- harness.status: ` + "`" + invoke + ` sprint status` + "`" + `
+- harness.start_sprint: ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+- harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+- harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
+- harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
+- harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
+
+Autonomous protocol for Claude Code:
+
+1. At session start, read .harness/progress.md, .harness/spec.md, and
+   .harness/agent-protocol.md.
+2. Run ` + "`" + invoke + ` sprint status` + "`" + ` before implementation.
+3. Create or update the sprint contract when needed.
+4. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+   without asking the user.
+5. Read .harness/reports/latest.json. Fix high/critical findings and rerun QA.
+6. Run ` + "`" + invoke + ` sprint score` + "`" + ` before saying the task is complete.
+
+Only ask the user for product decisions, acceptance criteria changes,
+dependency installation approval when it changes the project stack, or visual
+baseline approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
 `
 }
 

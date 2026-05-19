@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.3
+npx github:dancampari/harness#v0.3.4
 ```
 
 It detects the project, creates `.harness/`, installs references for Codex,
@@ -28,10 +28,10 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.3 --yes
-npx github:dancampari/harness#v0.3.3 --cli codex --yes
-npx github:dancampari/harness#v0.3.3 --cli claude --yes
-npx github:dancampari/harness#v0.3.3 --cli cursor --yes
+npx github:dancampari/harness#v0.3.4 --yes
+npx github:dancampari/harness#v0.3.4 --cli codex --yes
+npx github:dancampari/harness#v0.3.4 --cli claude --yes
+npx github:dancampari/harness#v0.3.4 --cli cursor --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -51,8 +51,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.3 --yes
-npx github:dancampari/harness#v0.3.3 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.4 --yes
+npx github:dancampari/harness#v0.3.4 sprint new "implement user auth"
 ```
 
 Edit the generated contract:
@@ -64,10 +64,10 @@ Edit the generated contract:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.3 sprint qa
-npx github:dancampari/harness#v0.3.3 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.3 sprint score
-npx github:dancampari/harness#v0.3.3 run --resume
+npx github:dancampari/harness#v0.3.4 sprint qa
+npx github:dancampari/harness#v0.3.4 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.4 sprint score
+npx github:dancampari/harness#v0.3.4 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -97,9 +97,10 @@ bootstrap. The public function interface is the Harness CLI. In other words,
 the agent function call is a shell command, because external coding CLIs cannot
 call in-process Go functions inside another binary.
 
-The generated `.harness/agent-protocol.md`, `AGENTS.md`,
+The generated `.harness/agent-protocol.md`, `AGENTS.md`, `CLAUDE.md`,
 `.claude/settings.json`, and `.cursor/rules/harness.mdc` tell the coding tool
-to call these functions itself:
+to call these functions itself. `CLAUDE.md` is the Claude Code project memory;
+`.claude/settings.json` is used only for Claude Code hooks/settings.
 
 ```bash
 harness sprint status
@@ -117,7 +118,7 @@ Integration behavior:
 | Tool | Installed reference | How Harness is triggered |
 |---|---|---|
 | Codex | `AGENTS.md` Harness Gate | Codex is instructed to run Harness after meaningful changes |
-| Claude Code | `.claude/settings.json` hooks | Claude Code hooks run Harness automatically on stop and before commits |
+| Claude Code | `CLAUDE.md` + `.claude/settings.json` | `CLAUDE.md` gives Claude Code the autonomous protocol; hooks run Harness automatically on stop and before commits |
 | Cursor | `.cursor/rules/harness.mdc` | Cursor receives an always-on rule to run Harness autonomously |
 | Git | `.git/hooks/pre-push` | Safety-net report before push, non-blocking |
 
