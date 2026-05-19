@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.4
+npx github:dancampari/harness#v0.3.5
 ```
 
 It detects the project, creates `.harness/`, installs references for Codex,
@@ -28,10 +28,10 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.4 --yes
-npx github:dancampari/harness#v0.3.4 --cli codex --yes
-npx github:dancampari/harness#v0.3.4 --cli claude --yes
-npx github:dancampari/harness#v0.3.4 --cli cursor --yes
+npx github:dancampari/harness#v0.3.5 --yes
+npx github:dancampari/harness#v0.3.5 --cli codex --yes
+npx github:dancampari/harness#v0.3.5 --cli claude --yes
+npx github:dancampari/harness#v0.3.5 --cli cursor --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -51,8 +51,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.4 --yes
-npx github:dancampari/harness#v0.3.4 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.5 --yes
+npx github:dancampari/harness#v0.3.5 sprint new "implement user auth"
 ```
 
 Edit the generated contract:
@@ -64,10 +64,10 @@ Edit the generated contract:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.4 sprint qa
-npx github:dancampari/harness#v0.3.4 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.4 sprint score
-npx github:dancampari/harness#v0.3.4 run --resume
+npx github:dancampari/harness#v0.3.5 sprint qa
+npx github:dancampari/harness#v0.3.5 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.5 sprint score
+npx github:dancampari/harness#v0.3.5 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -181,22 +181,24 @@ Active dimensions:
 `harness run --resume` opens a full-screen Bubble Tea interface:
 
 ```text
-harness - Autonomous Development Pipeline
+harness  Autonomous Development Pipeline
 
 ╭──────────────────────────────────────────────────────────────╮
 │ Sprints                                                      │
-│ #    Goal                         Contract   Build   QA Score│
-│ 001  validate harness demo        AGREED     DONE    PASS 98 │
+│ #    Goal                    Contract    Build    QA     Score│
+│ 001  validate harness demo   ✓ AGREED    ✓ DONE   ✓ PASS 98   │
+│                              Time 2.5s   Findings 0           │
 ╰──────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────────╮
 │ Activity                                                     │
-│ ### Sprint 001                                               │
-│ - Verdict: PASS                                              │
-│ - Score: 98/100                                              │
+│ QA PASS  sprint 001  score 98/100  runtime 2.5s              │
+│ contract 100/80 pass  sensors: contract-validator            │
+│ coverage 87/70 pass  sensors: vitest-coverage                │
+│ e2e 100/70 pass  sensors: playwright                         │
 ╰──────────────────────────────────────────────────────────────╯
 
-active sprint 1/10   avg score 98   elapsed 2m   [q quit | r refresh]
+ready   project harness-demo   sprint 1/1   avg score 98   elapsed 2m   [q quit | r refresh]
 ```
 
 ## Strict Pass Policy
