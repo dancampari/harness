@@ -19,4 +19,5 @@ Thumbs.db
 /tmp/
 *.test
 *.out
+*.tgz
 coverage.txt

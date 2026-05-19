@@ -3,7 +3,7 @@
 // The screen has three regions:
 //  1. Sprints table: Goal / Contract / Build / QA / Score / Time / Findings
 //  2. Activity log: latest QA summary, findings, or project progress lines
-//  3. Status bar: current state, sprint count, average score, elapsed time
+//  3. Status bar: current state, sprint count, average score, watch status
 package tui
 
 import (
@@ -22,6 +22,8 @@ import (
 )
 
 const (
+	refreshInterval = 750 * time.Millisecond
+
 	colorPanel   = lipgloss.Color("236")
 	colorBorder  = lipgloss.Color("66")
 	colorAccent  = lipgloss.Color("81")
@@ -87,6 +89,9 @@ type model struct {
 	sprints   []sprintRow
 	activity  []string
 	startTime time.Time
+	lastSeen  time.Time
+	lastEvent string
+	signature string
 	width     int
 	height    int
 }
@@ -109,6 +114,8 @@ func newModel(root string, resume bool) *model {
 		root:      root,
 		project:   projectName(root),
 		startTime: time.Now(),
+		lastSeen:  time.Now(),
+		lastEvent: "watching .harness",
 		width:     96,
 	}
 	if resume {
@@ -123,7 +130,7 @@ func (m *model) Init() tea.Cmd {
 }
 
 func tick() tea.Cmd {
-	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+	return tea.Tick(refreshInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -145,8 +152,27 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) refresh() {
+	m.refreshWatchState()
 	m.sprints = m.loadSprints()
 	m.activity = m.loadActivity()
+}
+
+func (m *model) refreshWatchState() {
+	signature, event := harnessSignature(m.root)
+	if m.signature == "" {
+		m.signature = signature
+		if event != "" {
+			m.lastEvent = event
+		}
+		return
+	}
+	if signature != m.signature {
+		m.signature = signature
+		m.lastSeen = time.Now()
+		if event != "" {
+			m.lastEvent = event
+		}
+	}
 }
 
 func (m *model) loadSprints() []sprintRow {
@@ -346,13 +372,17 @@ func (m *model) renderActivity(width int) string {
 	var sb strings.Builder
 	sb.WriteString(panelTitleStyle.Render("Activity"))
 	sb.WriteString("\n")
+	sb.WriteString(renderActivityLine(truncate(fmt.Sprintf("watching .harness  last event: %s  updated %s",
+		m.lastEvent, compactDuration(time.Since(m.lastSeen))), width-2)))
+	sb.WriteString("\n")
 	limit := 8
 	if m.height > 0 {
 		limit = maxInt(4, minInt(12, m.height-16))
 	}
 	lines := m.activity
-	if len(lines) > limit {
-		lines = lines[:limit]
+	activityLimit := maxInt(1, limit-1)
+	if len(lines) > activityLimit {
+		lines = lines[:activityLimit]
 	}
 	for _, line := range lines {
 		rendered := renderActivityLine(truncate(line, width-2))
@@ -389,14 +419,87 @@ func (m *model) renderStatus() string {
 	if latest := latestSprint(m.sprints); latest != nil {
 		active = latest.Number
 	}
-	return fmt.Sprintf("%s   project %s   sprint %d/%d   avg score %s   elapsed %s   [q quit | r refresh]",
+	return fmt.Sprintf("%s   project %s   sprint %d/%d   avg score %s   watch %s: %s   elapsed %s   [q quit | r refresh]",
 		state,
 		m.project,
 		active,
 		maxInt(active, len(m.sprints)),
 		averageScore(m.sprints),
+		compactDuration(time.Since(m.lastSeen)),
+		m.lastEvent,
 		time.Since(m.startTime).Round(time.Second),
 	)
+}
+
+type watchedArtifact struct {
+	path  string
+	label string
+	mod   time.Time
+	size  int64
+}
+
+func harnessSignature(root string) (string, string) {
+	artifacts := watchedArtifacts(root)
+	if len(artifacts) == 0 {
+		return "empty", "watching .harness"
+	}
+	sort.Slice(artifacts, func(i, j int) bool { return artifacts[i].path < artifacts[j].path })
+	var newest watchedArtifact
+	var sb strings.Builder
+	for i, a := range artifacts {
+		if i == 0 || a.mod.After(newest.mod) {
+			newest = a
+		}
+		sb.WriteString(a.path)
+		sb.WriteByte('|')
+		sb.WriteString(fmt.Sprintf("%d|%d\n", a.mod.UnixNano(), a.size))
+	}
+	return sb.String(), newest.label
+}
+
+func watchedArtifacts(root string) []watchedArtifact {
+	var artifacts []watchedArtifact
+	addFile := func(rel, label string) {
+		info, err := os.Stat(filepath.Join(root, rel))
+		if err != nil || info.IsDir() {
+			return
+		}
+		artifacts = append(artifacts, watchedArtifact{
+			path:  filepath.ToSlash(rel),
+			label: label,
+			mod:   info.ModTime(),
+			size:  info.Size(),
+		})
+	}
+	addDir := func(rel, label string) {
+		entries, err := os.ReadDir(filepath.Join(root, rel))
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			artifacts = append(artifacts, watchedArtifact{
+				path:  filepath.ToSlash(filepath.Join(rel, entry.Name())),
+				label: label,
+				mod:   info.ModTime(),
+				size:  info.Size(),
+			})
+		}
+	}
+
+	addFile("config.yaml", "config updated")
+	addFile("spec.md", "spec updated")
+	addFile("progress.md", "progress scored")
+	addDir("contracts", "contract updated")
+	addDir("evaluations", "evaluation updated")
+	addDir("reports", "qa report updated")
+	return artifacts
 }
 
 func (m *model) contentWidth() int {
@@ -483,6 +586,20 @@ func compactSeconds(seconds float64) string {
 		return fmt.Sprintf("%.1fs", d.Seconds())
 	}
 	return d.Round(time.Second).String()
+}
+
+func compactDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	d = d.Round(time.Second)
+	if d < time.Second {
+		return "just now"
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	}
+	return d.String() + " ago"
 }
 
 func cleanLines(lines []string) []string {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestViewRendersDashboardSections(t *testing.T) {
@@ -66,11 +67,50 @@ Ship a demo dashboard.
 		"Autonomous Development Pipeline",
 		"Sprints",
 		"Activity",
+		"watching .harness",
 		"QA PASS",
 		"score 98/100",
 	} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected view to contain %q\n%s", expected, view)
 		}
+	}
+}
+
+func TestRefreshDetectsHarnessArtifactChanges(t *testing.T) {
+	root := t.TempDir()
+	harnessDir := filepath.Join(root, ".harness")
+	if err := os.MkdirAll(filepath.Join(harnessDir, "reports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModel(harnessDir, true)
+	initial := m.signature
+	reportPath := filepath.Join(harnessDir, "reports", "latest.json")
+	report := `{
+  "schema_version": "2",
+  "sprint_number": 1,
+  "total_score": 100,
+  "verdict": "PASS",
+  "dimensions": {},
+  "duration_seconds": 1.1
+}`
+	if err := os.WriteFile(reportPath, []byte(report), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(reportPath, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	m.refresh()
+	if m.signature == initial {
+		t.Fatal("expected watch signature to change after report update")
+	}
+	if m.lastEvent != "qa report updated" {
+		t.Fatalf("expected last event to be qa report updated, got %q", m.lastEvent)
+	}
+	if !strings.Contains(m.View(), "qa report updated") {
+		t.Fatalf("expected view to include the latest watch event\n%s", m.View())
 	}
 }
