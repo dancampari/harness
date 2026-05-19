@@ -9,7 +9,7 @@ const pkg = require(path.join(root, "package.json"));
 const args = process.argv.slice(2);
 const env = {
   ...process.env,
-  HARNESS_INVOKE: process.env.HARNESS_INVOKE || `npx ${pkg.name}`,
+  HARNESS_INVOKE: process.env.HARNESS_INVOKE || `npx github:dancampari/harness#v${pkg.version}`,
 };
 
 function binaryNames() {

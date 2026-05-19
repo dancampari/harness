@@ -17,14 +17,14 @@ quality evidence visible and conservative.
 Current public GitHub install:
 
 ```bash
-npx github:dancampari/harness --version
+npx github:dancampari/harness#v0.3.1 --version
 ```
 
 Initialize a project:
 
 ```bash
 cd your-project
-npx github:dancampari/harness init --install-hooks
+npx github:dancampari/harness#v0.3.1 init --install-hooks
 ```
 
 The package is also prepared for npm registry publishing as
@@ -44,9 +44,9 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness init --install-hooks
-npx github:dancampari/harness doctor
-npx github:dancampari/harness sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.1 init --install-hooks
+npx github:dancampari/harness#v0.3.1 doctor
+npx github:dancampari/harness#v0.3.1 sprint new "implement user auth"
 ```
 
 Edit the generated contract:
@@ -58,10 +58,10 @@ Edit the generated contract:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness sprint qa
-npx github:dancampari/harness sprint qa --accept-screenshots
-npx github:dancampari/harness sprint score
-npx github:dancampari/harness run --resume
+npx github:dancampari/harness#v0.3.1 sprint qa
+npx github:dancampari/harness#v0.3.1 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.1 sprint score
+npx github:dancampari/harness#v0.3.1 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A

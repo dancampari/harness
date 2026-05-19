@@ -41,8 +41,9 @@ jobs:
       - name: Build CLI
         shell: pwsh
         run: |
+          $version = node -p "require('./package.json').version"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          go build -ldflags "-X main.version=0.3.0" -o .\dist\harness.exe .
+          go build -ldflags "-X main.version=$version" -o .\dist\harness.exe .
 
       - name: Validate npm package
         shell: pwsh
