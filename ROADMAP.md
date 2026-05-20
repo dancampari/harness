@@ -98,6 +98,15 @@ Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 - [x] Load new run artifacts from `.harness/current-run.json` and `.harness/runs/*`
 - [x] Preserve fallback support for legacy contracts/reports/progress artifacts
 
+## v0.4.9 - Terminal UI Polish
+
+- [x] Remove lateral truncation ellipses from dashboard rendering
+- [x] Tighten terminal-width clipping and padding
+- [x] Refine Quality Gate score bar with green filled and muted empty segments
+- [x] Align Pipeline stages and statuses in fixed columns
+- [x] Keep footer focused on shortcuts and move notices into Latest Activity
+- [x] Reduce aggressive truncation in Runs History
+
 ## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit

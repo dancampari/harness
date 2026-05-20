@@ -76,6 +76,26 @@ func TestViewFitsTerminalSize(t *testing.T) {
 	}
 }
 
+func TestOverviewDoesNotRenderTruncationEllipsis(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	appendRun(t, harnessDir, "2026-05-20_22-42-00_sprint-005",
+		"Uma meta deliberadamente longa para confirmar que o terminal recorta sem reticencias laterais",
+		"pass", 94)
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 92
+	m.height = 26
+	view := m.View()
+	if strings.Contains(view, "...") {
+		t.Fatalf("dashboard should clip cleanly without lateral ellipsis\n%s", view)
+	}
+	for _, line := range strings.Split(view, "\n") {
+		if lipgloss.Width(line) > m.width {
+			t.Fatalf("line exceeds terminal width %d: %d\n%s", m.width, lipgloss.Width(line), line)
+		}
+	}
+}
+
 func TestRunsViewHandlesLongGoals(t *testing.T) {
 	harnessDir := writeHarnessFixture(t)
 	appendRun(t, harnessDir, "2026-05-20_22-42-00_sprint-005",

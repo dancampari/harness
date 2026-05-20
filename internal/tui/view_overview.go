@@ -17,9 +17,9 @@ func (m *model) renderOverview(width int, mode screenMode) string {
 			m.renderLatestActivityCard(width, 6),
 		)
 	}
-	left := 54
+	left := maxInt(48, minInt(64, width*42/100))
 	if mode == modeMedium {
-		left = 44
+		left = maxInt(40, minInt(50, width*44/100))
 	}
 	right := width - left - 2
 	if right < 38 {
@@ -72,7 +72,7 @@ func (m *model) renderQualityGateCard(width int) string {
 			"No quality report available.",
 			"harness sprint qa"))
 	}
-	barWidth := maxInt(8, minInt(28, width-18))
+	barWidth := maxInt(8, minInt(22, width-20))
 	lines := []string{
 		styles.Muted.Render("Score"),
 		statusStyle(run.Status).Render(fmt.Sprintf("%d /100", run.Score)),
@@ -85,7 +85,7 @@ func (m *model) renderQualityGateCard(width int) string {
 		lines = append(lines, qualityRow(q, width-4))
 	}
 	if len(run.Quality) > limit {
-		lines = append(lines, styles.Muted.Render(fmt.Sprintf("... %d more dimensions", len(run.Quality)-limit)))
+		lines = append(lines, styles.Muted.Render(fmt.Sprintf("%d more dimensions hidden", len(run.Quality)-limit)))
 	}
 	return card("Quality Gate", width, strings.Join(lines, "\n"))
 }
@@ -100,22 +100,32 @@ func (m *model) renderPipelineCard(width int) string {
 	if width < 88 {
 		var lines []string
 		for i, key := range stages {
-			lines = append(lines, row(
-				column{Value: labels[i], Width: 12},
-				column{Value: stripANSI(statusBadge(defaultString(run.Validations[key], "pending"))), Width: width - 18},
+			status := defaultString(run.Validations[key], "pending")
+			lines = append(lines, styledRow(
+				styledColumn{Value: labels[i], Width: 12},
+				styledColumn{Value: statusLabel(status), Width: maxInt(8, width-18), Style: statusStyle(status), Styled: true},
 			))
 		}
 		return card("Pipeline", width, strings.Join(lines, "\n"))
 	}
-	segment := maxInt(12, (width-8)/5)
-	var top []string
-	var bottom []string
-	for i, key := range stages {
-		top = append(top, padRight(labels[i], segment))
-		bottom = append(bottom, padRight(stripANSI(statusBadge(defaultString(run.Validations[key], "pending"))), segment))
+	contentWidth := maxInt(40, width-4)
+	arrowWidth := 4 * 3
+	segment := maxInt(10, (contentWidth-arrowWidth)/5)
+	if segment*5+arrowWidth > contentWidth {
+		segment = maxInt(8, (contentWidth-arrowWidth)/5)
 	}
-	arrow := " " + symbols().Arrow + " "
-	return card("Pipeline", width, strings.Join(top, arrow)+"\n"+strings.Join(bottom, strings.Repeat(" ", len(arrow))))
+	var top strings.Builder
+	var bottom strings.Builder
+	for i, key := range stages {
+		if i > 0 {
+			top.WriteString(" " + symbols().Arrow + " ")
+			bottom.WriteString("   ")
+		}
+		status := defaultString(run.Validations[key], "pending")
+		top.WriteString(padRight(labels[i], segment))
+		bottom.WriteString(padStyled(statusStyle(status).Render(statusLabel(status)), segment))
+	}
+	return card("Pipeline", width, top.String()+"\n"+bottom.String())
 }
 
 func (m *model) renderRunsHistoryCard(width, limit int) string {
@@ -132,14 +142,16 @@ func (m *model) renderRunsHistoryCard(width, limit int) string {
 }
 
 func (m *model) renderLatestActivityCard(width, limit int) string {
-	if len(m.data.Events) == 0 {
+	events := append([]ActivityEvent{}, m.notices...)
+	events = append(events, m.data.Events...)
+	if len(events) == 0 {
 		return card("Latest Activity", width, styles.Muted.Render("Waiting for agent activity..."))
 	}
 	lines := []string{
 		styles.Muted.Render(fmt.Sprintf("watching .harness  last event: %s  updated %s",
 			m.data.LastEvent, relativeUpdated(m.data.LastSeen))),
 	}
-	for _, ev := range m.data.Events[:minInt(limit, len(m.data.Events))] {
+	for _, ev := range events[:minInt(limit, len(events))] {
 		lines = append(lines, renderEventLine(ev, width-4))
 	}
 	return card("Latest Activity", width, strings.Join(lines, "\n"))
@@ -192,26 +204,27 @@ func qualityRow(q QualityDimension, width int) string {
 }
 
 func historyHeader(width int) string {
-	if width < 48 {
-		return row(column{Value: "#", Width: 4}, column{Value: "Goal", Width: width - 24}, column{Value: "Status", Width: 8}, column{Value: "Score", Width: 5})
+	if width < 58 {
+		return row(column{Value: "#", Width: 4}, column{Value: "Goal", Width: maxInt(10, width-24)}, column{Value: "Status", Width: 7}, column{Value: "Score", Width: 5})
 	}
-	return row(column{Value: "#", Width: 5}, column{Value: "Goal", Width: maxInt(10, width-32)}, column{Value: "Status", Width: 8}, column{Value: "Score", Width: 5}, column{Value: "Find", Width: 4})
+	return row(column{Value: "#", Width: 4}, column{Value: "Goal", Width: maxInt(14, width-37)}, column{Value: "Status", Width: 7}, column{Value: "Score", Width: 5}, column{Value: "Time", Width: 7}, column{Value: "Find", Width: 4})
 }
 
 func historyRow(run RunRecord, width int) string {
-	if width < 48 {
+	if width < 58 {
 		return styledRow(
 			styledColumn{Value: runNumber(run), Width: 4},
-			styledColumn{Value: run.Feature, Width: width - 24},
-			styledColumn{Value: statusLabel(run.Status), Width: 8, Style: statusStyle(run.Status), Styled: true},
+			styledColumn{Value: run.Feature, Width: maxInt(10, width-24)},
+			styledColumn{Value: statusLabel(run.Status), Width: 7, Style: statusStyle(run.Status), Styled: true},
 			styledColumn{Value: fmt.Sprintf("%d", run.Score), Width: 5, Style: statusStyle(run.Status), Styled: true},
 		)
 	}
 	return styledRow(
-		styledColumn{Value: runNumber(run), Width: 5},
-		styledColumn{Value: run.Feature, Width: maxInt(10, width-32)},
-		styledColumn{Value: statusLabel(run.Status), Width: 8, Style: statusStyle(run.Status), Styled: true},
+		styledColumn{Value: runNumber(run), Width: 4},
+		styledColumn{Value: run.Feature, Width: maxInt(14, width-37)},
+		styledColumn{Value: statusLabel(run.Status), Width: 7, Style: statusStyle(run.Status), Styled: true},
 		styledColumn{Value: fmt.Sprintf("%d", run.Score), Width: 5, Style: statusStyle(run.Status), Styled: true},
+		styledColumn{Value: defaultString(run.Runtime, "-"), Width: 7},
 		styledColumn{Value: fmt.Sprintf("%d", run.Findings), Width: 4},
 	)
 }
@@ -220,6 +233,17 @@ func padRight(value string, width int) string {
 	value = truncate(value, width)
 	if pad := width - runeLen(value); pad > 0 {
 		return value + strings.Repeat(" ", pad)
+	}
+	return value
+}
+
+func padStyled(value string, width int) string {
+	visible := lipgloss.Width(value)
+	if visible > width {
+		return truncate(stripANSI(value), width)
+	}
+	if visible < width {
+		return value + strings.Repeat(" ", width-visible)
 	}
 	return value
 }

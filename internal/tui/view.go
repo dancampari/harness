@@ -87,13 +87,6 @@ func (m *model) renderFooter(width int) string {
 	line := "[enter] Details   [o] Open Report   [d] Doctor   [1-6] Switch View   [r] Refresh   [q] Quit"
 	if m.commandMode {
 		line = "> " + m.commandInput
-	} else if m.commandBusy {
-		line = "running: " + m.commandRun
-	} else if m.lastNotice != "" {
-		line = m.lastNotice
-	}
-	if m.commandMode || m.commandBusy {
-		return styles.Footer.Width(width).Render(truncate(line, width-4))
 	}
 	return styles.Footer.Width(width).Render(truncate(line, width-4))
 }
@@ -161,6 +154,9 @@ func renderEventLine(ev ActivityEvent, width int) string {
 	clock := formatClock(ev.Timestamp)
 	eventType := defaultString(ev.Type, "event")
 	message := defaultString(ev.Message, "-")
+	if eventType == "report.opened" || eventType == "report.open.failed" {
+		message = filepathBase(message)
+	}
 	line := row(
 		column{Value: clock, Width: 8},
 		column{Value: eventType, Width: 24},

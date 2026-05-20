@@ -46,9 +46,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refresh()
 	case openDoneMsg:
 		if msg.err != "" {
-			m.lastNotice = "open report failed: " + msg.err
+			m.addNotice("report.open.failed", msg.err)
 		} else if msg.path != "" {
-			m.lastNotice = "opened report: " + msg.path
+			m.addNotice("report.opened", msg.path)
 		}
 	}
 	return m, nil
@@ -156,6 +156,7 @@ func (m *model) executeCommand(input string) (tea.Model, tea.Cmd) {
 	m.commandBusy = true
 	m.commandRun = input
 	m.addCommandLog("command running: " + input)
+	m.addNotice("command.running", input)
 	return m, runCommand(m.root, input)
 }
 
@@ -175,6 +176,22 @@ func (m *model) setViewByKey(key string) {
 	var n int
 	if _, err := fmt.Sscanf(key, "%d", &n); err == nil && n >= 1 && n <= len(viewLabels) {
 		m.activeView = viewID(n - 1)
+	}
+}
+
+func (m *model) addNotice(eventType, message string) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	m.notices = append([]ActivityEvent{{
+		Timestamp: time.Now(),
+		Type:      eventType,
+		Message:   message,
+		Agent:     m.data.Project.Agent,
+	}}, m.notices...)
+	if len(m.notices) > 8 {
+		m.notices = m.notices[:8]
 	}
 }
 

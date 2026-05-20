@@ -44,7 +44,7 @@ type model struct {
 	commandBusy  bool
 	commandRun   string
 	commandLog   []string
-	lastNotice   string
+	notices      []ActivityEvent
 }
 
 func newModel(root string, resume bool, version string) *model {

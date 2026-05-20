@@ -34,7 +34,7 @@ func (m *model) contentWidth() int {
 	if m.width <= 0 {
 		return 118
 	}
-	return maxInt(40, m.width-2)
+	return maxInt(40, m.width-4)
 }
 
 func (m *model) availableBodyHeight() int {
@@ -99,7 +99,7 @@ func (m *model) fitToScreen(view string) string {
 			visible = lipgloss.Width(lines[i])
 		}
 		if visible < width {
-			lines[i] = line + strings.Repeat(" ", width-visible)
+			lines[i] = lines[i] + strings.Repeat(" ", width-visible)
 		}
 	}
 	for len(lines) < height {
@@ -186,15 +186,10 @@ func progressBar(score, width int) string {
 	if score > 0 && filled == 0 {
 		filled = 1
 	}
-	s := symbols()
-	bar := strings.Repeat(s.Bar, filled) + strings.Repeat(s.Empty, width-filled)
-	if score >= 80 {
-		return styles.Success.Render(bar)
+	if useASCII() {
+		return styles.Success.Render(strings.Repeat("#", filled)) + styles.Muted.Render(strings.Repeat("-", width-filled))
 	}
-	if score >= 60 {
-		return styles.Warning.Render(bar)
-	}
-	return styles.Danger.Render(bar)
+	return styles.Success.Render(strings.Repeat("━", filled)) + styles.Muted.Render(strings.Repeat("─", width-filled))
 }
 
 func visibleWindow(total, limit, cursor int) (int, int) {
@@ -253,10 +248,7 @@ func truncate(s string, max int) string {
 	if len(runes) <= max {
 		return s
 	}
-	if max <= 3 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-3]) + "..."
+	return string(runes[:max])
 }
 
 func runeLen(s string) int {

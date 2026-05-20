@@ -105,7 +105,7 @@ func (m *model) openReport() tea.Cmd {
 		path = selected.ReportPath
 	}
 	if path == "" {
-		m.lastNotice = "no report available"
+		m.addNotice("report.open.failed", "no report available")
 		return nil
 	}
 	return func() tea.Msg {
