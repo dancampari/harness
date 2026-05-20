@@ -18,6 +18,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dancampari/harness/internal/agreement"
 	"github.com/dancampari/harness/internal/evaluator"
 	"github.com/dancampari/harness/internal/planner"
 )
@@ -198,7 +199,7 @@ func (m *model) loadSprints() []sprintRow {
 	progress := readOptionalFile(filepath.Join(m.root, "progress.md"))
 	var rows []sprintRow
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "sprint-") {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "sprint-") || !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
 		var n int
@@ -213,8 +214,8 @@ func (m *model) loadSprints() []sprintRow {
 		}
 		if c, err := planner.Parse(filepath.Join(dir, e.Name())); err == nil {
 			row.Goal = c.Title
-			if errs := c.Validate(); len(errs) == 0 {
-				row.Contract = "AGREED"
+			if st, err := agreement.NewManager(m.root).Status(n); err == nil {
+				row.Contract = strings.ToUpper(st.State)
 			}
 		}
 
@@ -438,8 +439,17 @@ func contractCell(r sprintRow, frame int) string {
 	if contractDone(r) {
 		return "✓ AGREED"
 	}
-	if r.Contract == "draft" {
+	switch strings.ToUpper(r.Contract) {
+	case "DRAFT":
 		return spinner(frame) + " DRAFT"
+	case "PROPOSED":
+		return spinner(frame) + " REVIEW"
+	case "CHANGED":
+		return "× CHANGED"
+	case "REJECTED":
+		return "× REJECT"
+	case "MISSING":
+		return "• missing"
 	}
 	return "• pending"
 }

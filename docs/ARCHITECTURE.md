@@ -15,9 +15,21 @@ goal, declared deliverables, acceptance criteria, and constraints under
 
 Code: `internal/sprint/sprint.go`, `internal/planner/contract.go`.
 
+### Divergent Agents
+
+Contracts move through a deterministic agreement gate before implementation.
+`harness contract propose` records a stable hash for the current contract.
+Required roles, currently `planner` and `tester`, must approve that exact hash
+with `harness contract approve --role ...`. If the contract changes after
+approval, the hash changes and the state becomes `changed`; QA blocks until the
+new hash is proposed and approved again.
+
+Code: `internal/agreement/agreement.go`, `cmd/harness/contract.go`.
+
 ### Premature Victory
 
 `harness sprint qa` runs configured sensors in an isolated evaluator process.
+By default it first checks that the current sprint contract is `agreed`.
 Config v2 is strict: a dimension is active only when both threshold and weight
 are greater than zero, and every active dimension must have at least one real
 configured sensor execute. Missing sensors become `missing-sensor` findings,

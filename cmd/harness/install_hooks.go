@@ -372,6 +372,10 @@ Harness function calls:
 
 - harness.status: ` + "`" + invoke + ` sprint status` + "`" + `
 - harness.start_sprint: ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+- harness.contract_status: ` + "`" + invoke + ` contract status` + "`" + `
+- harness.contract_propose: ` + "`" + invoke + ` contract propose` + "`" + `
+- harness.contract_approve: ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + `
+- harness.contract_reject: ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + `
 - harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
@@ -390,12 +394,14 @@ Autonomous protocol:
    - Deliverables (files + symbols expected)
    - Acceptance Criteria (with thresholds 1-10)
    - Constraints (forbidden imports, complexity limits)
-6. Implement the feature.
-7. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+6. Run ` + "`" + invoke + ` contract propose` + "`" + ` and wait until ` + "`" + invoke + ` contract status` + "`" + `
+   returns AGREED. Planner and tester roles must approve the same hash.
+7. Implement the feature only after agreement.
+8. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
    without waiting for the user.
-8. Read .harness/reports/latest.json. If the verdict is FAIL or any
+9. Read .harness/reports/latest.json. If the verdict is FAIL or any
    high/critical findings exist, fix them and rerun QA.
-9. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the task complete.
+10. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the task complete.
 
 Only ask the user for product decisions, acceptance-criteria changes, dependency
 installation approval when it changes the project stack, or visual baseline
@@ -417,6 +423,10 @@ Harness function calls:
 
 - harness.status: ` + "`" + invoke + ` sprint status` + "`" + `
 - harness.start_sprint: ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+- harness.contract_status: ` + "`" + invoke + ` contract status` + "`" + `
+- harness.contract_propose: ` + "`" + invoke + ` contract propose` + "`" + `
+- harness.contract_approve: ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + `
+- harness.contract_reject: ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + `
 - harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
@@ -430,10 +440,12 @@ Autonomous protocol for Claude Code:
    .harness/agent-protocol.md.
 2. Run ` + "`" + invoke + ` sprint status` + "`" + ` before implementation.
 3. Create or update the sprint contract when needed.
-4. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+4. Run ` + "`" + invoke + ` contract propose` + "`" + ` after writing the contract. Do not
+   implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED.
+5. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
    without asking the user.
-5. Read .harness/reports/latest.json. Fix high/critical findings and rerun QA.
-6. Run ` + "`" + invoke + ` sprint score` + "`" + ` before saying the task is complete.
+6. Read .harness/reports/latest.json. Fix high/critical findings and rerun QA.
+7. Run ` + "`" + invoke + ` sprint score` + "`" + ` before saying the task is complete.
 
 Only ask the user for product decisions, acceptance criteria changes,
 dependency installation approval when it changes the project stack, or visual
@@ -456,11 +468,13 @@ This project uses Harness Engineering. Always:
 4. Before implementing a feature, ensure a contract exists at
    .harness/contracts/sprint-NNN.md. If not, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
    and fill it in.
-5. After implementing, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` in the integrated terminal
+5. Run ` + "`" + invoke + ` contract propose` + "`" + ` after writing the contract. Do not
+   implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED.
+6. After implementing, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` in the integrated terminal
    without asking the user to run it.
-6. Process .harness/reports/latest.json. Iterate on findings before
+7. Process .harness/reports/latest.json. Iterate on findings before
    marking the task complete.
-7. Run ` + "`" + invoke + ` sprint score` + "`" + ` to update progress.md.
+8. Run ` + "`" + invoke + ` sprint score` + "`" + ` to update progress.md.
 
 Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajectory of the project.
 `
@@ -473,11 +487,13 @@ func contractAutomationProtocol(enabled bool) string {
 Before creating or editing a sprint contract, read:
 
 - .harness/skills/contract-authoring/SKILL.md
+- .harness/skills/contract-review/SKILL.md
 
 Use that skill to decompose the user's prompt into small sprints, create the
-current sprint contract, and fill the Markdown completely. Do not ask the user
-to write the contract by hand. Ask only the smallest product question when the
-request is too ambiguous to make objective acceptance criteria.`
+current sprint contract, fill the Markdown completely, propose the hash, and
+route it through planner/tester agreement. Do not ask the user to write the
+contract by hand. Ask only the smallest product question when the request is
+too ambiguous to make objective acceptance criteria.`
 	}
 	return `Contract automation skills are disabled.
 

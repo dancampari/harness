@@ -65,6 +65,7 @@ func runInit(opts initOptions) error {
 	dirs := []string{
 		root,
 		filepath.Join(root, "contracts"),
+		filepath.Join(root, "approvals"),
 		filepath.Join(root, "evaluations"),
 		filepath.Join(root, "screenshots"),
 		filepath.Join(root, "reports"),
@@ -207,6 +208,10 @@ Harness functions:
 |---|---|---|
 | harness.status | ` + "`" + invoke + ` sprint status` + "`" + ` | At session start and before final response |
 | harness.start_sprint | ` + "`" + invoke + ` sprint new "<goal>"` + "`" + ` | When no active sprint contract exists |
+| harness.contract_status | ` + "`" + invoke + ` contract status` + "`" + ` | Before implementation and before QA |
+| harness.contract_propose | ` + "`" + invoke + ` contract propose` + "`" + ` | After writing or changing the sprint contract |
+| harness.contract_approve | ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + ` | When a required agent role agrees with the exact contract hash |
+| harness.contract_reject | ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + ` | When a required role cannot accept the contract |
 | harness.qa | ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` | After meaningful code changes and before completion |
 | harness.score | ` + "`" + invoke + ` sprint score` + "`" + ` | After QA has produced the final verdict |
 | harness.doctor | ` + "`" + invoke + ` doctor` + "`" + ` | When a required sensor/tool is missing |
@@ -219,12 +224,15 @@ Autonomy rules:
 1. Read .harness/progress.md, .harness/spec.md, and this file at session
    start.
 2. Create or update the sprint contract before implementing a feature.
-3. Run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` without waiting for the user after
+3. Run ` + "`" + invoke + ` contract propose` + "`" + ` after the contract is written.
+4. Do not implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED. The
+   planner and tester roles must approve the same contract hash.
+5. Run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` without waiting for the user after
    meaningful code changes.
-4. Read .harness/reports/latest.json after QA. Fix high/critical findings and
+6. Read .harness/reports/latest.json after QA. Fix high/critical findings and
    rerun QA.
-5. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the work complete.
-6. Only ask the user for decisions Harness cannot make deterministically:
+7. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the work complete.
+8. Only ask the user for decisions Harness cannot make deterministically:
    product intent, changing acceptance criteria, installing missing project
    tools when that changes the app stack, or accepting visual baselines with
    ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.

@@ -41,13 +41,15 @@
 
 ## v0.4 - Spec-Driven Multi-Agent Agreement
 
-- [ ] Contract state machine: draft -> proposed -> agreed -> building -> qa -> scored
-- [ ] Stable contract hash per revision
-- [ ] Agent approval records for planner, builder, and tester roles
-- [ ] CLI commands: `harness contract propose`, `harness contract approve`, `harness contract status`
-- [ ] Gate implementation until required agents agree on the same contract hash
-- [ ] Record agreement history in `.harness/` artifacts and memory.db
-- [ ] Keep Harness deterministic: agents write approvals, Harness verifies state
+- [x] Contract agreement states: draft, proposed, agreed, changed, rejected
+- [x] Stable contract hash per revision
+- [x] Agent approval records for planner and tester roles
+- [x] CLI commands: `harness contract propose`, `harness contract approve`, `harness contract reject`, `harness contract status`
+- [x] QA gate blocks until required agents agree on the same contract hash
+- [x] Agreement history in `.harness/` lock and approval artifacts
+- [x] Contract review skill for independent tester/reviewer role
+- [x] Keep Harness deterministic: agents write approvals, Harness verifies state
+- [ ] Optional provider-specific agent launch helpers for Claude Code Agent View and Codex subagents
 
 ## v0.5 - Broader Stack Coverage
 

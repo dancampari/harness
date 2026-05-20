@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/dancampari/harness/internal/adapters"
+	"github.com/dancampari/harness/internal/agreement"
 	"github.com/dancampari/harness/internal/config"
 	"github.com/dancampari/harness/internal/evaluator"
 	"github.com/dancampari/harness/internal/memory"
@@ -91,10 +92,8 @@ func (m *Manager) Status() (Status, error) {
 	cpath := filepath.Join(m.root, "contracts", fmt.Sprintf("sprint-%03d.md", n))
 	if c, err := planner.Parse(cpath); err == nil {
 		st.Goal = c.Title
-		if errs := c.Validate(); len(errs) == 0 {
-			st.Contract = "agreed"
-		} else {
-			st.Contract = "draft"
+		if ag, err := agreement.NewManager(m.root).Status(n); err == nil {
+			st.Contract = ag.State
 		}
 	}
 	epath := filepath.Join(m.root, "evaluations", fmt.Sprintf("sprint-%03d.md", n))

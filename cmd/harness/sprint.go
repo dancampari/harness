@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/dancampari/harness/internal/agreement"
 	"github.com/dancampari/harness/internal/sprint"
 	"github.com/spf13/cobra"
 )
@@ -43,8 +44,8 @@ func newSprintNewCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("✓ Created %s (sprint %03d)\n", path, n)
-			fmt.Println("  Next: edit the contract, then implement the feature.")
-			fmt.Println("  When done: harness sprint qa")
+			fmt.Println("  Next: fill the contract, then run harness contract propose.")
+			fmt.Println("  Implementation starts only after planner/tester agreement.")
 			return nil
 		},
 	}
@@ -74,6 +75,7 @@ func newSprintQACmd() *cobra.Command {
 	var format string
 	var internal bool
 	var acceptScreenshots bool
+	var allowUnagreed bool
 	cmd := &cobra.Command{
 		Use:   "qa",
 		Short: "Run the Evaluator (isolated subprocess) on the current sprint",
@@ -93,6 +95,11 @@ users never pass it; the parent process sets it when forking.`,
 				// the EvaluationResult as JSON on stdout. Nothing else
 				// may go to stdout (the parent depends on parseable JSON).
 				return mgr.RunQAInternal(os.Stdout, acceptScreenshots)
+			}
+			if !allowUnagreed {
+				if err := agreement.NewManager(".harness").EnsureAgreed(0); err != nil {
+					return err
+				}
 			}
 			// We are the parent. Spawn the subprocess and render.
 			result, err := mgr.RunQA(acceptScreenshots)
@@ -114,6 +121,8 @@ users never pass it; the parent process sets it when forking.`,
 	cmd.Flags().StringVar(&format, "format", autoFormat(), "output format: tty|json")
 	cmd.Flags().BoolVar(&acceptScreenshots, "accept-screenshots", false,
 		"accept current Playwright screenshots as the visual baseline")
+	cmd.Flags().BoolVar(&allowUnagreed, "allow-unagreed", false,
+		"explicitly run QA before multi-agent contract agreement")
 	cmd.Flags().BoolVar(&internal, "internal", false,
 		"internal use only: act as the isolated evaluator subprocess")
 	_ = cmd.Flags().MarkHidden("internal")

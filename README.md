@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.12
+npx github:dancampari/harness#v0.4.0
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.12 --yes
-npx github:dancampari/harness#v0.3.12 --cli codex --yes
-npx github:dancampari/harness#v0.3.12 --cli claude --yes
-npx github:dancampari/harness#v0.3.12 --cli cursor --yes
-npx github:dancampari/harness#v0.3.12 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.3.12 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.4.0 --yes
+npx github:dancampari/harness#v0.4.0 --cli codex --yes
+npx github:dancampari/harness#v0.4.0 --cli claude --yes
+npx github:dancampari/harness#v0.4.0 --cli cursor --yes
+npx github:dancampari/harness#v0.4.0 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.4.0 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.12 --yes
-npx github:dancampari/harness#v0.3.12 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.0 --yes
+npx github:dancampari/harness#v0.4.0 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -92,13 +92,22 @@ contract yourself:
 .harness/contracts/sprint-001.md
 ```
 
-Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
+Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.3.12 sprint qa
-npx github:dancampari/harness#v0.3.12 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.12 sprint score
-npx github:dancampari/harness#v0.3.12 run --resume
+npx github:dancampari/harness#v0.4.0 contract propose
+npx github:dancampari/harness#v0.4.0 contract approve --role planner
+npx github:dancampari/harness#v0.4.0 contract approve --role tester
+```
+
+Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
+run:
+
+```bash
+npx github:dancampari/harness#v0.4.0 sprint qa
+npx github:dancampari/harness#v0.4.0 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.0 sprint score
+npx github:dancampari/harness#v0.4.0 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -141,17 +150,22 @@ When automated contract skills are enabled, Harness also installs:
 ```text
 .harness/skills/contract-authoring/SKILL.md
 .harness/skills/contract-authoring/references/
+.harness/skills/contract-review/SKILL.md
 ```
 
 The agent references instruct Codex, Claude Code, or Cursor to read that skill,
 break the user's prompt into a small sprint, call `harness sprint new`, and fill
-the contract Markdown automatically before implementation. Harness remains the
-deterministic validator; the skills only guide the agent toward viable
-contracts.
+the contract Markdown automatically. A separate tester/reviewer role must then
+review the same contract hash before implementation. Harness remains the
+deterministic validator; the skills only guide agents toward viable contracts.
 
 ```bash
 harness sprint status
 harness sprint new "<goal>"
+harness contract propose
+harness contract approve --role planner
+harness contract approve --role tester
+harness contract status
 harness sprint qa --format=json
 harness sprint score
 harness doctor
@@ -169,36 +183,37 @@ Integration behavior:
 | Cursor | `.cursor/rules/harness.mdc` | Cursor receives an always-on rule to run Harness autonomously |
 | Git | `.git/hooks/pre-push` | Safety-net report before push, non-blocking |
 
-Harness reports only. It does not block commits or pushes by default; the agent
-or human decides what to do with the result.
+Harness does not block commits or pushes by default. The agreement gate does
+block QA until the active contract is `AGREED`; sensor verdicts are still
+reported as data for the agent or human to act on.
 
 ## Spec Driven And Agent Agreement
 
-Harness is Spec Driven in the current production sense:
+Harness is Spec Driven:
 
 - `.harness/spec.md` is the project specification and persistent product bar.
 - `.harness/contracts/sprint-NNN.md` turns one user request into a small,
   testable sprint contract.
 - `.harness/agent-protocol.md`, `AGENTS.md`, `CLAUDE.md`, and Cursor rules tell
-  coding agents to create contracts, implement against them, run QA, read
-  findings, fix, and score.
+  coding agents to create contracts, propose them, approve required roles, run
+  QA, read findings, fix, and score.
 - The evaluator is deterministic and isolated from the builder process.
 
-The full PBQ-style multi-agent agreement gate is not implemented yet. Today,
-Codex, Claude Code, and Cursor can cooperate through the same Harness files and
-CLI commands, but Harness does not yet require separate planner/builder/tester
-agents to approve the same contract before implementation starts.
+The PBQ-style agreement gate is deterministic:
 
-The intended next layer is deterministic contract agreement:
-
-- contract states: `draft -> proposed -> agreed -> building -> qa -> scored`;
+- agreement states: `draft`, `proposed`, `agreed`, `changed`, and `rejected`;
 - a stable contract hash for every revision;
-- agent approvals recorded as local files or SQLite rows;
-- commands such as `harness contract propose`, `harness contract approve`, and
-  `harness contract status`;
+- agent approvals recorded under `.harness/approvals/`;
+- lock files under `.harness/contracts/sprint-NNN.lock.json`;
+- commands `harness contract propose`, `harness contract approve`,
+  `harness contract reject`, and `harness contract status`;
 - QA blocked until the active contract has the required approvals;
 - no LLM judgment inside Harness; agents may write approvals, Harness only
   verifies state, hashes, required roles, and sensor results.
+
+By default the required roles are `planner` and `tester`. If the contract file
+changes after approval, the hash changes and the contract state becomes
+`CHANGED`; it must be proposed and approved again before QA.
 
 ## Terminal Layout
 
@@ -277,7 +292,7 @@ dimension scores, thresholds, findings, and sensors without requiring the user
 to open the markdown report manually.
 
 ```text
-harness  Autonomous Development Pipeline   v0.3.12
+harness  Autonomous Development Pipeline   v0.4.0
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    ⠋ SCORE 2.5s    0
@@ -352,7 +367,15 @@ Harness creates this local directory:
     contract-authoring/
       SKILL.md
       references/
+    contract-review/
+      SKILL.md
   contracts/
+    sprint-001.md
+    sprint-001.lock.json
+  approvals/
+    sprint-001/
+      planner.json
+      tester.json
   evaluations/
   reports/
   screenshots/
@@ -378,7 +401,11 @@ harness doctor
 harness spec
 harness sprint new <goal>
 harness sprint status
-harness sprint qa [--format=tty|json] [--accept-screenshots]
+harness contract status [--sprint N]
+harness contract propose [--sprint N]
+harness contract approve --role planner|tester [--sprint N]
+harness contract reject --role planner|tester --reason <text> [--sprint N]
+harness sprint qa [--format=tty|json] [--accept-screenshots] [--allow-unagreed]
 harness sprint score
 harness sprint list
 harness run [--resume]

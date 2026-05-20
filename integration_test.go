@@ -34,6 +34,9 @@ Prove active dimensions cannot pass without real sensors.
 ## Constraints
 - max_function_complexity: 10
 `)
+	runHarness(t, exe, root, "contract", "propose")
+	runHarness(t, exe, root, "contract", "approve", "--role", "planner")
+	runHarness(t, exe, root, "contract", "approve", "--role", "tester")
 
 	out := runHarness(t, exe, root, "sprint", "qa", "--format", "json")
 	var result struct {
@@ -78,6 +81,9 @@ Prove evaluator runs in an isolated subprocess.
 ## Constraints
 - max_function_complexity: 10
 `)
+	runHarness(t, exe, root, "contract", "propose")
+	runHarness(t, exe, root, "contract", "approve", "--role", "planner")
+	runHarness(t, exe, root, "contract", "approve", "--role", "tester")
 
 	cmd := exec.Command(exe, "sprint", "qa", "--format", "json")
 	cmd.Dir = root
@@ -108,6 +114,50 @@ Prove evaluator runs in an isolated subprocess.
 	}
 	if result.Process.ParentPID != cmd.Process.Pid {
 		t.Fatalf("expected evaluator parent pid %d, got %+v", cmd.Process.Pid, result.Process)
+	}
+}
+
+func TestCLIQABlocksWithoutContractAgreement(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+	writeIntegrationFile(t, filepath.Join(root, "index.js"), `export const value = 1;`)
+
+	runHarness(t, exe, root, "init", "--cli", "none")
+	runHarness(t, exe, root, "sprint", "new", "agreement gate")
+	writeIntegrationFile(t, filepath.Join(root, ".harness", "contracts", "sprint-001.md"), `# Sprint 001 - agreement gate
+
+## Goal
+Prove QA cannot run before agent agreement.
+
+## Deliverables
+- `+"`index.js`"+`
+
+## Acceptance Criteria
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | Gate blocks unapproved contracts | 8/10 |
+`)
+
+	cmd := exec.Command(exe, "sprint", "qa", "--format", "json")
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected QA to fail without agreement\n%s", out)
+	}
+	if !strings.Contains(string(out), "contract agreement required") {
+		t.Fatalf("expected agreement error, got\n%s", out)
+	}
+
+	runHarness(t, exe, root, "contract", "propose")
+	runHarness(t, exe, root, "contract", "approve", "--role", "planner")
+	status := runHarness(t, exe, root, "contract", "status")
+	if !strings.Contains(string(status), "state=PROPOSED") || !strings.Contains(string(status), "Missing:  tester") {
+		t.Fatalf("expected tester approval to still be missing\n%s", status)
+	}
+	runHarness(t, exe, root, "contract", "approve", "--role", "tester")
+	status = runHarness(t, exe, root, "contract", "status")
+	if !strings.Contains(string(status), "state=AGREED") {
+		t.Fatalf("expected agreed contract\n%s", status)
 	}
 }
 

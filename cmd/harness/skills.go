@@ -42,14 +42,21 @@ func runInstallSkills(root string) error {
 	if root == "" {
 		root = ".harness"
 	}
-	if err := os.MkdirAll(filepath.Join(root, "skills", "contract-authoring", "references"), 0o755); err != nil {
-		return err
+	dirs := []string{
+		filepath.Join(root, "skills", "contract-authoring", "references"),
+		filepath.Join(root, "skills", "contract-review"),
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
 	}
 	files := map[string]string{
 		filepath.Join(root, "skills", "contract-authoring", "SKILL.md"):                             contractAuthoringSkill,
 		filepath.Join(root, "skills", "contract-authoring", "references", "sprint-planning.md"):     sprintPlanningReference,
 		filepath.Join(root, "skills", "contract-authoring", "references", "contract-quality.md"):    contractQualityReference,
 		filepath.Join(root, "skills", "contract-authoring", "references", "acceptance-examples.md"): acceptanceExamplesReference,
+		filepath.Join(root, "skills", "contract-review", "SKILL.md"):                                contractReviewSkill,
 	}
 	for path, content := range files {
 		if err := writeTemplate(path, content); err != nil {
@@ -59,7 +66,7 @@ func runInstallSkills(root string) error {
 	if err := ensureAgentProtocolMode(root, true); err != nil {
 		return err
 	}
-	fmt.Println("  OK contract automation skills installed: .harness/skills/contract-authoring")
+	fmt.Println("  OK contract automation skills installed: .harness/skills/contract-authoring, .harness/skills/contract-review")
 	return nil
 }
 
@@ -119,9 +126,12 @@ Use this skill before implementing a user request.
 4. Run: harness sprint new "<small goal>" when a new contract is needed.
 5. Fill the generated contract completely before implementation.
 6. Keep the contract honest: do not remove important acceptance criteria to make QA pass.
-7. Implement only the current sprint.
-8. Run: harness sprint qa --format=json after meaningful changes.
-9. Read .harness/reports/latest.json, fix findings, rerun QA, then run: harness sprint score.
+7. Run: harness contract propose.
+8. Approve the planner role only when the contract is complete: harness contract approve --role planner.
+9. Do not implement until harness contract status returns AGREED.
+10. Implement only the current sprint.
+11. Run: harness sprint qa --format=json after meaningful changes.
+12. Read .harness/reports/latest.json, fix findings, rerun QA, then run: harness sprint score.
 
 ## Required Contract Properties
 
@@ -136,6 +146,36 @@ Use this skill before implementing a user request.
 - Sprint sizing: references/sprint-planning.md
 - Contract quality checklist: references/contract-quality.md
 - Examples of weak and strong criteria: references/acceptance-examples.md
+`
+
+const contractReviewSkill = `---
+name: harness-contract-review
+description: Use when an agent must independently review a Harness sprint contract before implementation and either approve or reject the exact contract hash.
+---
+
+# Harness Contract Review
+
+Use this skill before implementation, from a tester/reviewer role.
+
+## Workflow
+
+1. Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and the current sprint contract.
+2. Run: harness contract status.
+3. If the contract is draft or changed, ask the author/planner to run: harness contract propose.
+4. Review only the contract. Do not implement code.
+5. Reject weak contracts with: harness contract reject --role tester --reason "<specific issue>".
+6. Approve only if the contract is small, objective, testable, and aligned with .harness/spec.md:
+   harness contract approve --role tester.
+7. Confirm: harness contract status.
+
+## Review Criteria
+
+- The sprint is small enough for one implementation pass.
+- Deliverables name concrete files, routes, commands, schemas, or symbols.
+- Acceptance criteria are observable and include negative cases where relevant.
+- Constraints cover architecture, security, visual, complexity, and coverage risks that matter for the sprint.
+- The contract does not lower thresholds or remove risk to make QA easier.
+- No implementation starts until the contract status is AGREED.
 `
 
 const sprintPlanningReference = `# Sprint Planning

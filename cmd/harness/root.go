@@ -7,11 +7,13 @@ import "github.com/spf13/cobra"
 func Execute(version string) error {
 	var setup setupOptions
 	root := &cobra.Command{
-		Use:     "harness",
-		Short:   "Harness Engineering agent - stack-agnostic, deterministic, offline",
-		Long:    longDescription,
-		Version: version,
-		Args:    cobra.NoArgs,
+		Use:           "harness",
+		Short:         "Harness Engineering agent - stack-agnostic, deterministic, offline",
+		Long:          longDescription,
+		Version:       version,
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetup(setup, version)
 		},
@@ -29,6 +31,7 @@ func Execute(version string) error {
 		newInitCmd(),
 		newSpecCmd(),
 		newSprintCmd(),
+		newContractCmd(),
 		newRunCmd(version),
 		newProgressCmd(),
 		newTrendCmd(),
@@ -57,7 +60,10 @@ Workflow:
   harness                         # one-command setup
   harness --skills on             # setup with automated contract-authoring skills
   harness sprint new "<goal>"     # creates contracts/sprint-NNN.md template
-  # ... CLI writes contract, then implements the feature ...
+  harness contract propose        # proposes the contract hash for agreement
+  harness contract approve --role planner
+  harness contract approve --role tester
+  # ... CLI implements only after the contract is AGREED ...
   harness sprint qa               # runs Evaluator (isolated subprocess)
   harness sprint score            # consolidates verdict + updates progress.md
   harness doctor                  # checks active dimensions and sensor tooling
