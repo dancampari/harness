@@ -80,7 +80,7 @@ Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 - [x] Update Cursor rules for the spec-driven protocol and document enforcement limits
 - [x] Extend `doctor --strict` to detect missing or stale spec-driven skill artifacts
 - [x] Add tests for setup migration, skill generation, stale detection, and provider reference content
-- [ ] Validate end-to-end in `harness-demo` from prompt -> contract -> agreement -> implementation -> QA -> repair -> score
+- [x] Validate end-to-end in `harness-demo` from prompt -> contract -> agreement -> implementation -> QA -> score
 
 ## v0.5 - Broader Stack Coverage
 
