@@ -107,6 +107,14 @@ Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 - [x] Keep footer focused on shortcuts and move notices into Latest Activity
 - [x] Reduce aggressive truncation in Runs History
 
+## v0.4.10 - Terminal UI Visual Refinement
+
+- [x] Simplify the dashboard chrome with section rules instead of heavy card boxes
+- [x] Rebalance wide, medium, compact, and tiny terminal breakpoints
+- [x] Refine Overview, Runs, Report, Logs, Skills, and Doctor view spacing
+- [x] Improve selected-row and status styling without full-row color flooding
+- [x] Keep the release header version aligned with packaged builds
+
 ## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit

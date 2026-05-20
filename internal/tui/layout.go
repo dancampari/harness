@@ -14,59 +14,56 @@ const (
 	modeTiny screenMode = iota
 	modeCompact
 	modeMedium
-	modeFull
+	modeWide
 )
 
 func modeFor(width, height int) screenMode {
 	if width < 70 || (height > 0 && height < 18) {
 		return modeTiny
 	}
-	if width < 90 {
+	if width < 100 {
 		return modeCompact
 	}
-	if width < 120 {
+	if width < 140 {
 		return modeMedium
 	}
-	return modeFull
+	return modeWide
 }
 
 func (m *model) contentWidth() int {
 	if m.width <= 0 {
 		return 118
 	}
-	return maxInt(40, m.width-4)
+	return maxInt(40, m.width-2)
 }
 
 func (m *model) availableBodyHeight() int {
 	if m.height <= 0 {
 		return 28
 	}
-	return maxInt(6, m.height-5)
+	return maxInt(6, m.height-7)
 }
 
-func card(title string, width int, body string) string {
-	width = maxInt(20, width)
-	contentWidth := maxInt(1, width-4)
-	title = styles.CardTitle.Render(" " + strings.ToUpper(title) + " ")
-	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
-	for i, line := range lines {
-		lines[i] = fitPlainLine(line, contentWidth)
-	}
-	return styles.Card.Width(width).Render(title + "\n" + strings.Join(lines, "\n"))
+// section returns a section header: the title, then a ─ rule sized to width.
+func section(title string, width int) string {
+	width = maxInt(8, width)
+	return styles.Section.Render(title) + "\n" + styles.Rule.Render(strings.Repeat("─", width))
 }
 
-func emptyState(width int, message, command string) string {
+// rule emits a single horizontal ─ rule of the given width.
+func rule(width int) string {
+	return styles.Rule.Render(strings.Repeat("─", maxInt(1, width)))
+}
+
+// labelValue renders "label   value" with a dim label padded to labelWidth.
+func labelValue(label, value string, labelWidth int) string {
+	return styles.Muted.Render(padRight(label, labelWidth)) + value
+}
+
+func emptyState(message, command string) string {
 	lines := []string{styles.Muted.Render(message)}
 	if command != "" {
 		lines = append(lines, styles.Primary.Render(command))
-	}
-	return fitBlock(strings.Join(lines, "\n"), width)
-}
-
-func fitBlock(s string, width int) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	for i, line := range lines {
-		lines[i] = fitPlainLine(line, width)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -174,22 +171,29 @@ func styledRow(cols ...styledColumn) string {
 	return sb.String()
 }
 
-func kv(label, value string, width int) string {
-	labelWidth := 9
-	return truncate(fmt.Sprintf("%-*s: %s", labelWidth, label, value), width)
-}
-
-func progressBar(score, width int) string {
+// progressBar renders a score bar: green when score >= target, yellow when
+// below, red at zero. Empty cells stay muted ░ — never painted in the score
+// color (design rule).
+func progressBar(score, target, width int) string {
 	width = maxInt(4, width)
 	score = minInt(100, maxInt(0, score))
 	filled := int(float64(width) * float64(score) / 100.0)
 	if score > 0 && filled == 0 {
 		filled = 1
 	}
-	if useASCII() {
-		return styles.Success.Render(strings.Repeat("#", filled)) + styles.Muted.Render(strings.Repeat("-", width-filled))
+	if filled > width {
+		filled = width
 	}
-	return styles.Success.Render(strings.Repeat("━", filled)) + styles.Muted.Render(strings.Repeat("─", width-filled))
+	s := symbols()
+	style := styles.Success
+	switch {
+	case score <= 0:
+		style = styles.Danger
+	case score < target:
+		style = styles.Warning
+	}
+	return style.Render(strings.Repeat(s.Bar, filled)) +
+		styles.Faint.Render(strings.Repeat(s.Empty, width-filled))
 }
 
 func visibleWindow(total, limit, cursor int) (int, int) {
@@ -240,7 +244,25 @@ func formatDateTime(t time.Time) string {
 	return t.Local().Format("2006-01-02 15:04:05")
 }
 
+// truncate trims s to max runes, appending an ellipsis when it had to clip.
 func truncate(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	ell := symbols().Ell
+	ellLen := runeLen(ell)
+	if max <= ellLen {
+		return string(runes[:max])
+	}
+	return string(runes[:max-ellLen]) + ell
+}
+
+// truncateRaw cuts without adding an ellipsis (used inside row alignment).
+func truncateRaw(s string, max int) string {
 	if max <= 0 {
 		return ""
 	}
@@ -285,4 +307,23 @@ func displayVersion(version string) string {
 		return version
 	}
 	return "v" + version
+}
+
+func padRight(value string, width int) string {
+	value = truncateRaw(value, width)
+	if pad := width - runeLen(value); pad > 0 {
+		return value + strings.Repeat(" ", pad)
+	}
+	return value
+}
+
+func padStyled(value string, width int) string {
+	visible := lipgloss.Width(value)
+	if visible > width {
+		return truncateRaw(stripANSI(value), width)
+	}
+	if visible < width {
+		return value + strings.Repeat(" ", width-visible)
+	}
+	return value
 }

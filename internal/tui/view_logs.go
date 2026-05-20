@@ -2,69 +2,100 @@ package tui
 
 import (
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *model) renderLogsView(width int) string {
-	events := m.renderEventsPanel(width)
-	commands := m.renderCommandsPanel(width)
-	if width >= 120 {
-		left := width/2 - 1
-		right := width - left - 2
-		return lipgloss.JoinHorizontal(lipgloss.Top, m.renderEventsPanel(left), "  ", m.renderCommandsPanel(right))
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, events, commands)
-}
+	header := section("Logs · stream", width)
 
-func (m *model) renderEventsPanel(width int) string {
-	if len(m.data.Events) == 0 {
-		return card("Events", width, styles.Muted.Render("No events found."))
+	statusBar := styles.Muted.Render("level: ") + styles.Text.Render("all") +
+		styles.Muted.Render("   ·  scope: ") + styles.Text.Render(defaultString(m.data.Current.RunID, "-")) +
+		styles.Muted.Render("   ·  follow: ") + styles.Success.Render("on")
+
+	if len(m.data.Events) == 0 && len(m.commandLog) == 0 && len(m.data.Commands) == 0 {
+		return header + "\n" + statusBar + "\n\n" + styles.Muted.Render("No events found.")
 	}
-	limit := maxInt(6, m.availableBodyHeight()/2)
+
+	limit := maxInt(6, m.availableBodyHeight()-6)
 	start := minInt(m.scrollFor(viewLogs), maxInt(0, len(m.data.Events)-limit))
 	end := minInt(len(m.data.Events), start+limit)
-	var lines []string
+
+	lines := []string{header, statusBar, ""}
 	for _, ev := range m.data.Events[start:end] {
-		lines = append(lines, renderEventLine(ev, width-4))
+		lines = append(lines, renderLogRow(ev, width))
 	}
 	if len(m.data.Events) > limit {
-		lines = append(lines, styles.Muted.Render(rangeLabel("Events", start, end, len(m.data.Events))))
+		lines = append(lines, styles.Muted.Render(rangeLabel("events", start, end, len(m.data.Events))))
 	}
-	return card("Events", width, strings.Join(lines, "\n"))
-}
 
-func (m *model) renderCommandsPanel(width int) string {
+	// Command log strip — kept dim, no boxes.
 	commands := append([]string{}, m.commandLog...)
 	commands = append(commands, m.data.Commands...)
 	if m.commandBusy {
 		commands = append(commands, "running: "+m.commandRun)
 	}
-	if len(commands) == 0 {
-		return card("Commands", width, styles.Muted.Render("No command log found. Use : to run a harness command."))
+	if len(commands) > 0 {
+		lines = append(lines, "", styles.Muted.Render("commands"))
+		max := minInt(len(commands), 4)
+		for _, cmd := range commands[len(commands)-max:] {
+			lines = append(lines, styles.Muted.Render("· ")+styles.Text.Render(truncate(cmd, width-2)))
+		}
 	}
-	limit := maxInt(6, m.availableBodyHeight()/2)
-	if len(commands) > limit {
-		commands = commands[len(commands)-limit:]
+
+	// Trailing cursor — pulses via the model frame counter.
+	cursor := styles.Primary.Render("▎")
+	if m.frame%2 == 0 {
+		cursor = " "
 	}
-	var lines []string
-	for _, line := range commands {
-		lines = append(lines, renderLogLine(line, width-4))
-	}
-	return card("Commands", width, strings.Join(lines, "\n"))
+	lines = append(lines, "", cursor+" "+styles.Muted.Render("_"))
+	return strings.Join(lines, "\n")
 }
 
-func renderLogLine(line string, width int) string {
-	low := strings.ToLower(line)
-	line = truncate(line, width)
-	switch {
-	case strings.Contains(low, "fail"), strings.Contains(low, "error"):
-		return styles.Danger.Render(line)
-	case strings.Contains(low, "warn"), strings.Contains(low, "missing"):
-		return styles.Warning.Render(line)
-	case strings.Contains(low, "pass"), strings.Contains(low, "done"):
-		return styles.Success.Render(line)
-	default:
-		return styles.Text.Render(line)
+// renderLogRow: color the LEVEL token only, scope cyan, message in fg.
+func renderLogRow(ev ActivityEvent, width int) string {
+	clock := formatClock(ev.Timestamp)
+	level := deriveLogLevel(ev)
+	scope := defaultString(ev.Agent, "harness")
+	if s := scopeFromType(ev.Type); s != "" {
+		scope = s
 	}
+	msg := defaultString(ev.Message, "-")
+
+	lvlStyle := styles.Text
+	switch strings.ToLower(level) {
+	case "warn":
+		lvlStyle = styles.Warning
+	case "error", "fail":
+		lvlStyle = styles.Danger
+	case "debug":
+		lvlStyle = styles.Faint
+	}
+	msgWidth := maxInt(8, width-13-1-5-1-10-1)
+	return styles.Faint.Render(clock) + " " +
+		lvlStyle.Render(padRight(strings.ToUpper(level), 5)) + " " +
+		styles.Primary.Render(padRight(scope, 10)) + " " +
+		styles.Text.Render(truncate(msg, msgWidth))
+}
+
+func deriveLogLevel(ev ActivityEvent) string {
+	t := strings.ToLower(ev.Type)
+	switch {
+	case strings.Contains(t, "fail"), strings.Contains(t, "error"):
+		return "error"
+	case strings.Contains(t, "warn"), strings.Contains(t, "stale"):
+		return "warn"
+	case strings.Contains(t, "debug"):
+		return "debug"
+	default:
+		return "info"
+	}
+}
+
+func scopeFromType(t string) string {
+	t = strings.ToLower(t)
+	for _, scope := range []string{"contract", "build", "qa", "report", "accept", "repair"} {
+		if strings.HasPrefix(t, scope+".") || strings.HasPrefix(t, scope) {
+			return scope
+		}
+	}
+	return ""
 }

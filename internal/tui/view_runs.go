@@ -6,82 +6,99 @@ import (
 )
 
 func (m *model) renderRunsView(width int) string {
+	header := section("Runs history", width)
 	if len(m.data.Runs) == 0 {
-		return card("Runs", width, emptyState(width-4,
-			"No run history found.",
-			`harness sprint new "feature"`))
+		return header + "\n" + emptyState("No run history found.", `harness sprint new "feature"`)
 	}
-	limit := maxInt(4, m.availableBodyHeight()-7)
+	showBranch := width >= 110
+	limit := maxInt(4, m.availableBodyHeight()-5)
 	start, end := visibleWindow(len(m.data.Runs), limit, m.runCursor)
-	lines := []string{styles.TableHeader.Render(runsHeader(width - 4))}
+
+	lines := []string{
+		header,
+		runsHeader(width, showBranch),
+		rule(width),
+	}
 	for i := start; i < end; i++ {
-		lines = append(lines, m.runsRow(i, width-4))
+		lines = append(lines, m.runsRow(i, width, showBranch))
 	}
+	footerLine := styles.Muted.Render(
+		fmt.Sprintf("%d runs · filter: ", len(m.data.Runs))) +
+		styles.Text.Render("all") +
+		styles.Muted.Render(" · sort: ") +
+		styles.Text.Render("recent")
 	if len(m.data.Runs) > limit {
-		lines = append(lines, styles.Muted.Render(fmt.Sprintf("Rows %d-%d/%d", start+1, end, len(m.data.Runs))))
+		footerLine = styles.Muted.Render(fmt.Sprintf("rows %d-%d/%d", start+1, end, len(m.data.Runs))) +
+			styles.Muted.Render("   ·   ") + footerLine
 	}
-	lines = append(lines, "", styles.Muted.Render("Use arrows to select a run. Press enter for details."))
-	return card("Runs", width, strings.Join(lines, "\n"))
+	lines = append(lines, "", footerLine)
+	return strings.Join(lines, "\n")
 }
 
-func runsHeader(width int) string {
-	if width < 88 {
-		return row(
-			column{Value: "#", Width: 5},
-			column{Value: "Goal", Width: maxInt(14, width-44)},
-			column{Value: "Status", Width: 9},
-			column{Value: "Score", Width: 6},
-			column{Value: "Time", Width: 8},
-		)
+func runsColumns(width int, showBranch bool) (idW, goalW, stW, rtW, ageW, scW, brW int) {
+	idW, stW, rtW, ageW, scW, brW = 6, 10, 8, 10, 8, 22
+	fixed := 2 + idW + stW + rtW + ageW + scW
+	if showBranch {
+		fixed += brW
 	}
-	return row(
-		column{Value: "#", Width: 5},
-		column{Value: "Goal", Width: maxInt(20, width-78)},
-		column{Value: "Status", Width: 9},
-		column{Value: "Score", Width: 6},
-		column{Value: "Time", Width: 8},
-		column{Value: "Updated", Width: 12},
-		column{Value: "Find", Width: 5},
-		column{Value: "Report", Width: 20},
-	)
+	goalW = maxInt(14, width-fixed-2)
+	return
 }
 
-func (m *model) runsRow(index, width int) string {
+func runsHeader(width int, showBranch bool) string {
+	_, goalW, stW, rtW, ageW, scW, brW := runsColumns(width, showBranch)
+	headers := []string{
+		styles.TableHeader.Render(padRight("", 2)),
+		styles.TableHeader.Render(padRight("#", 6)),
+		styles.TableHeader.Render(padRight("sprint", goalW)),
+		styles.TableHeader.Render(padRight("status", stW)),
+		styles.TableHeader.Render(padRight("runtime", rtW)),
+		styles.TableHeader.Render(padRight("age", ageW)),
+		styles.TableHeader.Render(padRight("score", scW)),
+	}
+	if showBranch {
+		headers = append(headers, styles.TableHeader.Render(padRight("branch", brW)))
+	}
+	return strings.Join(headers, "")
+}
+
+func (m *model) runsRow(index, width int, showBranch bool) string {
 	run := m.data.Runs[index]
-	marker := " "
-	if index == m.runCursor {
-		marker = ">"
+	isSel := index == m.runCursor
+	mark := " "
+	if isSel {
+		mark = symbols().Mark
 	}
-	if width < 88 {
-		line := styledRow(
-			styledColumn{Value: marker + runNumber(run), Width: 5},
-			styledColumn{Value: run.Feature, Width: maxInt(14, width-44)},
-			styledColumn{Value: statusLabel(run.Status), Width: 9, Style: statusStyle(run.Status), Styled: true},
-			styledColumn{Value: fmt.Sprintf("%d", run.Score), Width: 6, Style: statusStyle(run.Status), Styled: true},
-			styledColumn{Value: defaultString(run.Runtime, "-"), Width: 8},
-		)
-		return styleSelected(line, run.Status, index == m.runCursor)
-	}
-	report := run.ReportPath
-	if report != "" {
-		report = filepathBase(report)
-	}
-	line := styledRow(
-		styledColumn{Value: marker + runNumber(run), Width: 5},
-		styledColumn{Value: run.Feature, Width: maxInt(20, width-78)},
-		styledColumn{Value: statusLabel(run.Status), Width: 9, Style: statusStyle(run.Status), Styled: true},
-		styledColumn{Value: fmt.Sprintf("%d", run.Score), Width: 6, Style: statusStyle(run.Status), Styled: true},
-		styledColumn{Value: defaultString(run.Runtime, "-"), Width: 8},
-		styledColumn{Value: relativeUpdated(run.UpdatedAt), Width: 12},
-		styledColumn{Value: fmt.Sprintf("%d", run.Findings), Width: 5},
-		styledColumn{Value: defaultString(report, "-"), Width: 20},
-	)
-	return styleSelected(line, run.Status, index == m.runCursor)
-}
 
-func styleSelected(line, status string, selected bool) string {
-	if selected {
-		return styles.Selected.Render(line)
+	stStyle := statusStyle(run.Status)
+	glyph := statusGlyph(run.Status)
+	stLabel := statusLabel(run.Status)
+
+	idW, goalW, stW, rtW, ageW, scW, brW := runsColumns(width, showBranch)
+
+	// Compose the row from cell-aligned segments. Status glyph + label are the
+	// only painted parts; everything else stays in fg / dim per design.
+	cells := []string{
+		styles.SelectMark.Render(padRight(mark, 2)),
+		styles.Text.Render(padRight(runNumber(run), idW)),
+		styles.Text.Render(padRight(defaultString(run.Feature, "-"), goalW)),
+		stStyle.Render(padRight(glyph+" "+stLabel, stW)),
+		styles.Text.Render(padRight(defaultString(run.Runtime, "-"), rtW)),
+		styles.Muted.Render(padRight(relativeUpdated(run.UpdatedAt), ageW)),
+		styles.Text.Render(padRight(fmt.Sprintf("%d/100", run.Score), scW)),
+	}
+	if showBranch {
+		cells = append(cells, styles.Muted.Render(padRight(defaultString(run.Branch, "-"), brW)))
+	}
+	line := strings.Join(cells, "")
+
+	// Selection highlight: extend background across the row width.
+	if isSel {
+		visible := visibleWidth(line)
+		if visible < width {
+			line = line + strings.Repeat(" ", width-visible)
+		}
+		line = styles.Selected.Render(line)
 	}
 	return line
 }

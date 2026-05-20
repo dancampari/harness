@@ -21,16 +21,14 @@ func TestViewRendersPremiumOverviewSections(t *testing.T) {
 
 	for _, expected := range []string{
 		"harness",
-		"Autonomous Development Pipeline",
 		"v0.4.7-test",
 		"[1] Overview",
-		"CURRENT RUN",
-		"QUALITY GATE",
-		"PIPELINE",
-		"RUNS HISTORY",
-		"LATEST ACTIVITY",
+		"Current run",
+		"Quality gate",
+		"Pipeline",
+		"Latest activity",
 		"Exportar helpers formatados",
-		"98 /100",
+		"98/100",
 		"correctness",
 		"validation.passed",
 	} {
@@ -52,7 +50,7 @@ func TestViewWorksWithoutCurrentRun(t *testing.T) {
 	m.height = 30
 	view := m.View()
 
-	for _, expected := range []string{"CURRENT RUN", "No active run found", "harness sprint new"} {
+	for _, expected := range []string{"Current run", "No active run found", "harness sprint new"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected empty overview to contain %q\n%s", expected, view)
 		}
@@ -108,7 +106,7 @@ func TestRunsViewHandlesLongGoals(t *testing.T) {
 	m.activeView = viewRuns
 	view := m.View()
 
-	for _, expected := range []string{"RUNS", "Status", "Score", "Uma meta muito"} {
+	for _, expected := range []string{"Runs history", "status", "score", "Uma meta muito"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected runs view to contain %q\n%s", expected, view)
 		}
@@ -164,7 +162,7 @@ Ship a demo dashboard.
 	m.width = 120
 	m.height = 32
 	view := m.View()
-	for _, expected := range []string{"BLOCKED", "STALE", "QUALITY GATE"} {
+	for _, expected := range []string{"BLOCKED", "stale", "Quality gate"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected stale QA to render %q\n%s", expected, view)
 		}
