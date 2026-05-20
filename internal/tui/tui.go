@@ -1,9 +1,10 @@
 // Package tui renders the live "Autonomous Development Pipeline" view.
 //
-// The screen has three regions:
-//  1. Sprints table: fixed status columns plus a separate goal line
-//  2. Activity log: latest QA summary, findings, or project progress lines
-//  3. Status bar: current state, sprint count, average score, watch status
+// The screen has four regions:
+//  1. Sprints table: fixed pipeline columns with active/pending/done states
+//  2. Verdict panel: latest QA report opened automatically after QA finishes
+//  3. Activity log: latest QA summary, findings, or project progress lines
+//  4. Status bar: current state, sprint count, average score, watch status
 package tui
 
 import (
@@ -84,16 +85,18 @@ func Run(harnessDir string, resume bool) error {
 }
 
 type model struct {
-	root      string
-	project   string
-	sprints   []sprintRow
-	activity  []string
-	startTime time.Time
-	lastSeen  time.Time
-	lastEvent string
-	signature string
-	width     int
-	height    int
+	root         string
+	project      string
+	sprints      []sprintRow
+	activity     []string
+	latestReport *evaluator.EvaluationResult
+	startTime    time.Time
+	lastSeen     time.Time
+	lastEvent    string
+	signature    string
+	frame        int
+	width        int
+	height       int
 }
 
 type sprintRow struct {
@@ -105,6 +108,7 @@ type sprintRow struct {
 	Score    string
 	Time     string
 	Findings int
+	Scored   bool
 }
 
 type tickMsg time.Time
@@ -145,6 +149,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refresh()
 		}
 	case tickMsg:
+		m.frame++
 		m.refresh()
 		return m, tick()
 	}
@@ -153,6 +158,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) refresh() {
 	m.refreshWatchState()
+	m.latestReport = m.loadLatestReport()
 	m.sprints = m.loadSprints()
 	m.activity = m.loadActivity()
 }
@@ -181,6 +187,7 @@ func (m *model) loadSprints() []sprintRow {
 	if err != nil {
 		return nil
 	}
+	progress := readOptionalFile(filepath.Join(m.root, "progress.md"))
 	var rows []sprintRow
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "sprint-") {
@@ -191,8 +198,8 @@ func (m *model) loadSprints() []sprintRow {
 		row := sprintRow{
 			Number:   n,
 			Contract: "draft",
-			Build:    "-",
-			QA:       "-",
+			Build:    "pending",
+			QA:       "pending",
 			Score:    "-",
 			Time:     "-",
 		}
@@ -225,6 +232,7 @@ func (m *model) loadSprints() []sprintRow {
 				row.Findings = countFindings(er)
 			}
 		}
+		row.Scored = strings.Contains(progress, fmt.Sprintf("Sprint %03d", n))
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Number < rows[j].Number })
@@ -249,7 +257,7 @@ func (m *model) loadActivity() []string {
 	return lines
 }
 
-func (m *model) activityFromLatestReport() []string {
+func (m *model) loadLatestReport() *evaluator.EvaluationResult {
 	b, err := os.ReadFile(filepath.Join(m.root, "reports", "latest.json"))
 	if err != nil {
 		return nil
@@ -258,6 +266,14 @@ func (m *model) activityFromLatestReport() []string {
 	if json.Unmarshal(b, &er) != nil {
 		return nil
 	}
+	return &er
+}
+
+func (m *model) activityFromLatestReport() []string {
+	if m.latestReport == nil {
+		return nil
+	}
+	er := *m.latestReport
 	lines := []string{
 		fmt.Sprintf("QA %s  sprint %03d  score %d/100  runtime %s",
 			er.Verdict, er.SprintNumber, er.TotalScore, compactSeconds(er.DurationSeconds)),
@@ -301,8 +317,15 @@ func (m *model) View() string {
 	width := m.contentWidth()
 	header := m.renderHeader(width)
 	sprints := panelStyle.Width(width).Render(m.renderSprints(width - 4))
+	verdict := ""
+	if m.latestReport != nil {
+		verdict = panelStyle.Width(width).Render(m.renderVerdict(width - 4))
+	}
 	activity := panelStyle.Width(width).Render(m.renderActivity(width - 4))
 	status := statusBarStyle.Width(width).Render(m.renderStatus())
+	if verdict != "" {
+		return lipgloss.JoinVertical(lipgloss.Left, header, sprints, verdict, activity, status)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, header, sprints, activity, status)
 }
 
@@ -330,43 +353,51 @@ func (m *model) renderSprints(width int) string {
 	maxRows := maxInt(1, minInt(8, len(m.sprints)))
 	start := len(m.sprints) - maxRows
 	for _, r := range m.sprints[start:] {
-		sb.WriteString(renderSprintRow(r, width))
+		sb.WriteString(renderSprintRow(r, width, m.frame))
 		sb.WriteString("\n")
 	}
 	return strings.TrimRight(sb.String(), "\n")
 }
 
 func renderSprintHeader(width int) string {
-	return headerCellStyle.Render(fixedSprintColumns(width, "#", "Contract", "Build", "QA", "Score", "Time", "Findings"))
+	return headerCellStyle.Render(sprintColumns(width, "#", "Goal", "Contract", "Build", "QA", "Score", "Time", "Find"))
 }
 
-func renderSprintRow(r sprintRow, width int) string {
-	statusLine := fixedSprintColumns(width,
+func renderSprintRow(r sprintRow, width, frame int) string {
+	line := sprintColumns(width,
 		fmt.Sprintf("%03d", r.Number),
-		stageText(r.Contract),
-		stageText(r.Build),
-		stageText(r.QA),
-		r.Score,
+		defaultString(r.Goal, "-"),
+		contractCell(r, frame),
+		buildCell(r, frame),
+		qaCell(r, frame),
+		scoreCell(r, frame),
 		r.Time,
 		fmt.Sprintf("%d", r.Findings),
 	)
-	goalLine := "     " + mutedStyle.Render("Goal ") + truncate(defaultString(r.Goal, "-"), maxInt(12, width-11))
 	switch strings.ToUpper(r.QA) {
 	case "PASS":
-		return goodStyle.Render(statusLine) + "\n" + goalLine
+		if r.Scored {
+			return goodStyle.Render(line)
+		}
+		return warnStyle.Render(line)
 	case "FAIL":
-		return badStyle.Render(statusLine) + "\n" + goalLine
+		return badStyle.Render(line)
 	default:
-		return mutedStyle.Render(statusLine) + "\n" + goalLine
+		if isSprintActive(r) {
+			return warnStyle.Render(line)
+		}
+		return mutedStyle.Render(line)
 	}
 }
 
-func fixedSprintColumns(width int, number, contract, build, qa, score, elapsed, findings string) string {
+func sprintColumns(width int, number, goal, contract, build, qa, score, elapsed, findings string) string {
+	goalWidth := sprintGoalWidth(width)
 	columns := []struct {
 		value string
 		width int
 	}{
 		{number, 4},
+		{goal, goalWidth},
 		{contract, 11},
 		{build, 9},
 		{qa, 9},
@@ -384,12 +415,180 @@ func fixedSprintColumns(width int, number, contract, build, qa, score, elapsed, 
 	return truncate(sb.String(), width)
 }
 
+func sprintGoalWidth(width int) int {
+	goal := width - 63
+	if goal < 10 {
+		return 10
+	}
+	if goal > 36 {
+		return 36
+	}
+	return goal
+}
+
+func contractCell(r sprintRow, frame int) string {
+	if contractDone(r) {
+		return "✓ AGREED"
+	}
+	if r.Contract == "draft" {
+		return spinner(frame) + " DRAFT"
+	}
+	return "• pending"
+}
+
+func buildCell(r sprintRow, frame int) string {
+	if buildDone(r) {
+		return "✓ DONE"
+	}
+	if contractDone(r) {
+		return spinner(frame) + " BUILD"
+	}
+	return "• pending"
+}
+
+func qaCell(r sprintRow, frame int) string {
+	switch strings.ToUpper(r.QA) {
+	case "PASS":
+		return "✓ PASS"
+	case "FAIL":
+		return "× FAIL"
+	}
+	if buildDone(r) {
+		return spinner(frame) + " QA"
+	}
+	return "• pending"
+}
+
+func scoreCell(r sprintRow, frame int) string {
+	if r.Scored {
+		return "✓ " + defaultString(r.Score, "-")
+	}
+	if qaDone(r) {
+		return spinner(frame) + " SCORE"
+	}
+	return "• -"
+}
+
+func spinner(frame int) string {
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	return frames[frame%len(frames)]
+}
+
+func contractDone(r sprintRow) bool {
+	return strings.EqualFold(r.Contract, "AGREED")
+}
+
+func buildDone(r sprintRow) bool {
+	return strings.EqualFold(r.Build, "DONE")
+}
+
+func qaDone(r sprintRow) bool {
+	return strings.EqualFold(r.QA, "PASS") || strings.EqualFold(r.QA, "FAIL")
+}
+
+func isSprintActive(r sprintRow) bool {
+	return !contractDone(r) || !buildDone(r) || !qaDone(r) || !r.Scored
+}
+
 func padCell(value string, width int) string {
 	value = truncate(value, width)
 	if len([]rune(value)) >= width {
 		return value
 	}
 	return value + strings.Repeat(" ", width-len([]rune(value)))
+}
+
+func (m *model) renderVerdict(width int) string {
+	er := m.latestReport
+	if er == nil {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(panelTitleStyle.Render("Verdict"))
+	sb.WriteString("\n")
+	summary := fmt.Sprintf("sprint %03d  %s  score %d/100  runtime %s",
+		er.SprintNumber, er.Verdict, er.TotalScore, compactSeconds(er.DurationSeconds))
+	if er.Verdict == "PASS" {
+		sb.WriteString(goodStyle.Render(truncate(summary, width-2)))
+	} else {
+		sb.WriteString(badStyle.Render(truncate(summary, width-2)))
+	}
+	sb.WriteString("\n")
+	sb.WriteString(headerCellStyle.Render(verdictColumns(width, "Dimension", "Score", "Threshold", "Status", "Find", "Sensors")))
+	sb.WriteString("\n")
+
+	names := orderedDimensionNames(er.Dimensions)
+	limit := minInt(6, len(names))
+	for _, name := range names[:limit] {
+		d := er.Dimensions[name]
+		status := "✓ pass"
+		lineStyle := goodStyle
+		if !d.Passed {
+			status = "× fail"
+			lineStyle = badStyle
+		}
+		sensors := strings.Join(d.SensorsUsed, ",")
+		if sensors == "" {
+			sensors = "-"
+		}
+		sb.WriteString(lineStyle.Render(verdictColumns(width,
+			name,
+			fmt.Sprintf("%d", d.Score),
+			fmt.Sprintf("%d", d.Threshold),
+			status,
+			fmt.Sprintf("%d", len(d.Findings)),
+			sensors,
+		)))
+		sb.WriteString("\n")
+	}
+	if len(names) > limit {
+		sb.WriteString(mutedStyle.Render(fmt.Sprintf("... %d more dimensions", len(names)-limit)))
+		sb.WriteString("\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func verdictColumns(width int, dimension, score, threshold, status, findings, sensors string) string {
+	sensorWidth := maxInt(10, width-58)
+	columns := []struct {
+		value string
+		width int
+	}{
+		{dimension, 15},
+		{score, 7},
+		{threshold, 10},
+		{status, 9},
+		{findings, 5},
+		{sensors, sensorWidth},
+	}
+	var sb strings.Builder
+	for i, col := range columns {
+		if i > 0 {
+			sb.WriteString("  ")
+		}
+		sb.WriteString(padCell(col.value, col.width))
+	}
+	return truncate(sb.String(), width)
+}
+
+func orderedDimensionNames(dims map[string]evaluator.DimensionScore) []string {
+	preferred := []string{"correctness", "coverage", "complexity", "security", "architecture", "contract", "e2e"}
+	seen := map[string]bool{}
+	var names []string
+	for _, name := range preferred {
+		if _, ok := dims[name]; ok {
+			names = append(names, name)
+			seen[name] = true
+		}
+	}
+	preferredCount := len(names)
+	for name := range dims {
+		if !seen[name] {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names[preferredCount:])
+	return names
 }
 
 func (m *model) renderActivity(width int) string {
@@ -549,6 +748,14 @@ func defaultString(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func readOptionalFile(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 func stageText(value string) string {

@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.9
+npx github:dancampari/harness#v0.3.10
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.9 --yes
-npx github:dancampari/harness#v0.3.9 --cli codex --yes
-npx github:dancampari/harness#v0.3.9 --cli claude --yes
-npx github:dancampari/harness#v0.3.9 --cli cursor --yes
-npx github:dancampari/harness#v0.3.9 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.3.9 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.3.10 --yes
+npx github:dancampari/harness#v0.3.10 --cli codex --yes
+npx github:dancampari/harness#v0.3.10 --cli claude --yes
+npx github:dancampari/harness#v0.3.10 --cli cursor --yes
+npx github:dancampari/harness#v0.3.10 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.3.10 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.9 --yes
-npx github:dancampari/harness#v0.3.9 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.10 --yes
+npx github:dancampari/harness#v0.3.10 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,10 +95,10 @@ contract yourself:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.9 sprint qa
-npx github:dancampari/harness#v0.3.9 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.9 sprint score
-npx github:dancampari/harness#v0.3.9 run --resume
+npx github:dancampari/harness#v0.3.10 sprint qa
+npx github:dancampari/harness#v0.3.10 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.10 sprint score
+npx github:dancampari/harness#v0.3.10 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -231,26 +231,33 @@ Claude Code, or Cursor show up as soon as `harness sprint new`,
 `harness sprint qa`, or `harness sprint score` write contracts, reports, or
 progress.
 
-The status columns are fixed-width. Long sprint goals render on their own line
-so the pipeline stages stay aligned and easy to scan.
+The sprint table now behaves like a pipeline dashboard: each stage has a
+fixed-width cell, active work shows a spinner, completed work shows a check, and
+the score step keeps spinning until `harness sprint score` records progress.
+Long goals stay inside the Goal column and are truncated instead of pushing QA
+or Score out of alignment.
+
+When QA writes `.harness/reports/latest.json`, the Verdict panel opens
+automatically inside the TUI. It summarizes the latest sprint verdict,
+dimension scores, thresholds, findings, and sensors without requiring the user
+to open the markdown report manually.
 
 ```text
 harness  Autonomous Development Pipeline
 
-╭──────────────────────────────────────────────────────────────╮
-│ Sprints                                                      │
-│ #    Contract     Build     QA        Score   Time    Findings │
-│ 001  AGREED       DONE      PASS      98      2.5s    0        │
-│      Goal validate harness demo                               │
-╰──────────────────────────────────────────────────────────────╯
+#    Goal                         Contract     Build     QA        Score   Time    Find
+001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    ⠋ SCORE 2.5s    0
 
-╭──────────────────────────────────────────────────────────────╮
-│ Activity                                                     │
-│ QA PASS  sprint 001  score 98/100  runtime 2.5s              │
-│ contract 100/80 pass  sensors: contract-validator            │
-│ coverage 87/70 pass  sensors: vitest-coverage                │
-│ e2e 100/70 pass  sensors: playwright                         │
-╰──────────────────────────────────────────────────────────────╯
+Verdict
+sprint 001  PASS  score 98/100  runtime 2.5s
+Dimension        Score    Threshold   Status     Find   Sensors
+contract         100      80          ✓ pass     0      contract-validator
+coverage         87       70          ✓ pass     0      vitest-coverage
+e2e              100      70          ✓ pass     0      playwright
+
+Activity
+watching .harness  last event: qa report updated  updated just now
+QA PASS  sprint 001  score 98/100  runtime 2.5s
 
 ready   project harness-demo   sprint 1/1   avg score 98   watch just now: qa report updated   elapsed 2m   [q quit | r refresh]
 ```

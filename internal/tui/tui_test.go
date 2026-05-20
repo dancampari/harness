@@ -66,10 +66,12 @@ Ship a demo dashboard.
 		"harness",
 		"Autonomous Development Pipeline",
 		"Sprints",
+		"Verdict",
 		"Activity",
 		"watching .harness",
 		"QA PASS",
 		"score 98/100",
+		"contract-validator",
 	} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected view to contain %q\n%s", expected, view)
@@ -77,7 +79,7 @@ Ship a demo dashboard.
 	}
 }
 
-func TestSprintTableKeepsGoalOutOfStatusColumns(t *testing.T) {
+func TestSprintTableKeepsGoalInFixedColumn(t *testing.T) {
 	row := sprintRow{
 		Number:   1,
 		Goal:     "Criar app Vite React todo-local-test com um nome longo que nao deve empurrar a tabela",
@@ -87,21 +89,25 @@ func TestSprintTableKeepsGoalOutOfStatusColumns(t *testing.T) {
 		Score:    "100",
 		Time:     "4ms",
 		Findings: 0,
+		Scored:   true,
 	}
-	rendered := renderSprintHeader(84) + "\n" + renderSprintRow(row, 84)
-	if !strings.Contains(rendered, "#") || !strings.Contains(rendered, "Contract") {
-		t.Fatalf("expected status columns first\n%s", rendered)
+	rendered := renderSprintHeader(84) + "\n" + renderSprintRow(row, 84, 0)
+	if !strings.Contains(rendered, "#") || !strings.Contains(rendered, "Goal") || !strings.Contains(rendered, "Contract") {
+		t.Fatalf("expected fixed sprint columns\n%s", rendered)
 	}
-	if !strings.Contains(rendered, "AGREED") || !strings.Contains(rendered, "DONE") || !strings.Contains(rendered, "PASS") {
-		t.Fatalf("expected fixed status columns\n%s", rendered)
-	}
-	for _, line := range strings.Split(rendered, "\n") {
-		if strings.Contains(line, "AGREED") && strings.Contains(line, "Criar app") {
-			t.Fatalf("goal leaked into status row\n%s", rendered)
+	for _, expected := range []string{"Criar app", "✓ AGREED", "✓ DONE", "✓ PASS", "✓ 100"} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("expected %q in fixed sprint row\n%s", expected, rendered)
 		}
 	}
-	if !strings.Contains(rendered, "Goal Criar app Vite React") {
-		t.Fatalf("expected separate goal line\n%s", rendered)
+	lines := strings.Split(rendered, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected header and one compact sprint row, got %d lines\n%s", len(lines), rendered)
+	}
+	for _, line := range lines {
+		if len([]rune(line)) > 84 {
+			t.Fatalf("expected row to stay within the requested width\n%s", rendered)
+		}
 	}
 }
 
