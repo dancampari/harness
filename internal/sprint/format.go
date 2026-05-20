@@ -85,9 +85,20 @@ func (q *QAResult) WriteTTY(w io.Writer) error {
 		}
 	}
 	fmt.Fprintln(w, "│")
+	fmt.Fprintf(w, "│  Evaluation: .harness/evaluations/sprint-%03d.md\n", q.sprintNumber)
 	fmt.Fprintf(w, "│  Report: .harness/reports/sprint-%03d.json\n", q.sprintNumber)
 	fmt.Fprintln(w, "└────────────────────────────────────────────────────────────────")
 	return nil
+}
+
+// EvaluationPath returns the human-readable markdown report path.
+func (q *QAResult) EvaluationPath() string {
+	return q.evaluationPath
+}
+
+// ReportPath returns the machine-readable JSON report path.
+func (q *QAResult) ReportPath() string {
+	return q.reportPath
 }
 
 type findingForSort struct {

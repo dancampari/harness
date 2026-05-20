@@ -103,7 +103,11 @@ users never pass it; the parent process sets it when forking.`,
 			case "json":
 				return result.WriteJSON(os.Stdout)
 			default:
-				return result.WriteTTY(os.Stdout)
+				if err := result.WriteTTY(os.Stdout); err != nil {
+					return err
+				}
+				openReportIfInteractive(result.EvaluationPath())
+				return nil
 			}
 		},
 	}
@@ -132,7 +136,9 @@ func newSprintScoreCmd() *cobra.Command {
 			fmt.Printf("✓ Sprint %03d scored: %d/100 (%s)\n",
 				report.SprintNumber, report.Score.Total, report.Verdict)
 			fmt.Printf("  Report: %s\n", report.Path)
+			fmt.Printf("  Evaluation: %s\n", report.EvaluationPath)
 			fmt.Printf("  Progress updated: %s\n", filepath.Join(".harness", "progress.md"))
+			openReportIfInteractive(report.EvaluationPath)
 			return nil
 		},
 	}

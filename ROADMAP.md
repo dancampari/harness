@@ -35,16 +35,28 @@
 - [x] Agent contract-authoring skill pack in `.harness/skills/`
 - [x] Animated live pipeline dashboard with automatic QA verdict panel
 - [x] Live TUI header shows the packaged release version
+- [x] Faster spinner animation with unchanged artifact polling cadence
+- [x] Interactive QA/score opens the markdown evaluation report automatically
 - [x] CI smoke test for vet, tests, build, npm pack, and npm exec
 
-## v0.4 - Broader Stack Coverage
+## v0.4 - Spec-Driven Multi-Agent Agreement
+
+- [ ] Contract state machine: draft -> proposed -> agreed -> building -> qa -> scored
+- [ ] Stable contract hash per revision
+- [ ] Agent approval records for planner, builder, and tester roles
+- [ ] CLI commands: `harness contract propose`, `harness contract approve`, `harness contract status`
+- [ ] Gate implementation until required agents agree on the same contract hash
+- [ ] Record agreement history in `.harness/` artifacts and memory.db
+- [ ] Keep Harness deterministic: agents write approvals, Harness verifies state
+
+## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit
 - [ ] Go: go vet, staticcheck, go test -cover, govulncheck
 - [ ] Rust: clippy, cargo test, cargo audit
 - [ ] Universal: optional semgrep adapter
 
-## v0.5 - Distribution Hardening
+## v0.6 - Distribution Hardening
 
 - [ ] GitHub Actions release job to cross-compile Linux/macOS/Windows for amd64/arm64
 - [ ] Publish npm package with prebuilt binaries in `dist/`

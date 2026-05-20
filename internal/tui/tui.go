@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	refreshInterval = 750 * time.Millisecond
+	animationInterval = 150 * time.Millisecond
+	refreshInterval   = 750 * time.Millisecond
 
 	colorPanel   = lipgloss.Color("236")
 	colorBorder  = lipgloss.Color("66")
@@ -94,6 +95,7 @@ type model struct {
 	startTime    time.Time
 	lastSeen     time.Time
 	lastEvent    string
+	lastRefresh  time.Time
 	signature    string
 	frame        int
 	width        int
@@ -136,7 +138,7 @@ func (m *model) Init() tea.Cmd {
 }
 
 func tick() tea.Cmd {
-	return tea.Tick(refreshInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
+	return tea.Tick(animationInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -152,7 +154,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tickMsg:
 		m.frame++
-		m.refresh()
+		now := time.Time(msg)
+		if m.lastRefresh.IsZero() || now.Sub(m.lastRefresh) >= refreshInterval {
+			m.refresh()
+		}
 		return m, tick()
 	}
 	return m, nil
@@ -163,6 +168,7 @@ func (m *model) refresh() {
 	m.latestReport = m.loadLatestReport()
 	m.sprints = m.loadSprints()
 	m.activity = m.loadActivity()
+	m.lastRefresh = time.Now()
 }
 
 func (m *model) refreshWatchState() {

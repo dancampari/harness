@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.11
+npx github:dancampari/harness#v0.3.12
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.11 --yes
-npx github:dancampari/harness#v0.3.11 --cli codex --yes
-npx github:dancampari/harness#v0.3.11 --cli claude --yes
-npx github:dancampari/harness#v0.3.11 --cli cursor --yes
-npx github:dancampari/harness#v0.3.11 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.3.11 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.3.12 --yes
+npx github:dancampari/harness#v0.3.12 --cli codex --yes
+npx github:dancampari/harness#v0.3.12 --cli claude --yes
+npx github:dancampari/harness#v0.3.12 --cli cursor --yes
+npx github:dancampari/harness#v0.3.12 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.3.12 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.11 --yes
-npx github:dancampari/harness#v0.3.11 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.12 --yes
+npx github:dancampari/harness#v0.3.12 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,10 +95,10 @@ contract yourself:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.11 sprint qa
-npx github:dancampari/harness#v0.3.11 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.11 sprint score
-npx github:dancampari/harness#v0.3.11 run --resume
+npx github:dancampari/harness#v0.3.12 sprint qa
+npx github:dancampari/harness#v0.3.12 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.12 sprint score
+npx github:dancampari/harness#v0.3.12 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -172,6 +172,34 @@ Integration behavior:
 Harness reports only. It does not block commits or pushes by default; the agent
 or human decides what to do with the result.
 
+## Spec Driven And Agent Agreement
+
+Harness is Spec Driven in the current production sense:
+
+- `.harness/spec.md` is the project specification and persistent product bar.
+- `.harness/contracts/sprint-NNN.md` turns one user request into a small,
+  testable sprint contract.
+- `.harness/agent-protocol.md`, `AGENTS.md`, `CLAUDE.md`, and Cursor rules tell
+  coding agents to create contracts, implement against them, run QA, read
+  findings, fix, and score.
+- The evaluator is deterministic and isolated from the builder process.
+
+The full PBQ-style multi-agent agreement gate is not implemented yet. Today,
+Codex, Claude Code, and Cursor can cooperate through the same Harness files and
+CLI commands, but Harness does not yet require separate planner/builder/tester
+agents to approve the same contract before implementation starts.
+
+The intended next layer is deterministic contract agreement:
+
+- contract states: `draft -> proposed -> agreed -> building -> qa -> scored`;
+- a stable contract hash for every revision;
+- agent approvals recorded as local files or SQLite rows;
+- commands such as `harness contract propose`, `harness contract approve`, and
+  `harness contract status`;
+- QA blocked until the active contract has the required approvals;
+- no LLM judgment inside Harness; agents may write approvals, Harness only
+  verifies state, hashes, required roles, and sensor results.
+
 ## Terminal Layout
 
 ### QA Report
@@ -193,9 +221,15 @@ or human decides what to do with the result.
 │  │  security        100      85         ✓          0       │
 │  └────────────────────────────────────────────────────────┘
 │
+│  Evaluation: .harness/evaluations/sprint-001.md
 │  Report: .harness/reports/sprint-001.json
 └────────────────────────────────────────────────────────────────
 ```
+
+In an interactive terminal, `harness sprint qa` and `harness sprint score`
+open the markdown evaluation automatically after the report is written. Harness
+tries `HARNESS_EDITOR`, then `cursor`, then `code`, then the OS default opener.
+Set `HARNESS_OPEN_REPORT=0` to disable this behavior.
 
 When a dimension fails, findings are printed underneath with rule, severity,
 file, line, and fingerprint. The JSON report contains the same data plus sensor
@@ -225,11 +259,11 @@ Active dimensions:
 
 ### Live TUI
 
-`harness run --resume` opens a full-screen Bubble Tea interface. It refreshes
-every 750ms from `.harness/` artifacts, so calls made autonomously by Codex,
-Claude Code, or Cursor show up as soon as `harness sprint new`,
-`harness sprint qa`, or `harness sprint score` write contracts, reports, or
-progress.
+`harness run --resume` opens a full-screen Bubble Tea interface. It animates
+pipeline spinners every 150ms and refreshes `.harness/` artifacts every 750ms,
+so calls made autonomously by Codex, Claude Code, or Cursor show up as soon as
+`harness sprint new`, `harness sprint qa`, or `harness sprint score` write
+contracts, reports, or progress.
 
 The sprint table now behaves like a pipeline dashboard: each stage has a
 fixed-width cell, active work shows a spinner, completed work shows a check, and
@@ -243,7 +277,7 @@ dimension scores, thresholds, findings, and sensors without requiring the user
 to open the markdown report manually.
 
 ```text
-harness  Autonomous Development Pipeline   v0.3.11
+harness  Autonomous Development Pipeline   v0.3.12
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    ⠋ SCORE 2.5s    0

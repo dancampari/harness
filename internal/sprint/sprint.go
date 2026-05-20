@@ -160,7 +160,12 @@ func (m *Manager) RunQA(acceptScreenshots bool) (*QAResult, error) {
 	if err := json.Unmarshal(out, &result); err != nil {
 		return nil, fmt.Errorf("parse subprocess output: %w", err)
 	}
-	return &QAResult{result: &result, sprintNumber: result.SprintNumber}, nil
+	return &QAResult{
+		result:         &result,
+		sprintNumber:   result.SprintNumber,
+		evaluationPath: filepath.Join(m.root, "evaluations", fmt.Sprintf("sprint-%03d.md", result.SprintNumber)),
+		reportPath:     filepath.Join(m.root, "reports", fmt.Sprintf("sprint-%03d.json", result.SprintNumber)),
+	}, nil
 }
 
 // RunQAInternal is the child-side worker. Called only when this process
@@ -346,6 +351,8 @@ func (m *Manager) Consolidate() (*ConsolidatedReport, error) {
 		Score:        evScore{Total: ev.TotalScore},
 		Verdict:      ev.Verdict,
 		Path:         reportPath,
+		EvaluationPath: filepath.Join(m.root, "evaluations",
+			fmt.Sprintf("sprint-%03d.md", n)),
 	}, nil
 }
 
@@ -543,16 +550,19 @@ func extractDimScores(dims map[string]evaluator.DimensionScore) map[string]int {
 // QAResult is the in-process result of a QA run. Provides format adapters
 // for the CLI to print it either as TTY or JSON.
 type QAResult struct {
-	result       *evaluator.EvaluationResult
-	sprintNumber int
+	result         *evaluator.EvaluationResult
+	sprintNumber   int
+	evaluationPath string
+	reportPath     string
 }
 
 // ConsolidatedReport is what `harness sprint score` returns.
 type ConsolidatedReport struct {
-	SprintNumber int
-	Score        evScore
-	Verdict      string
-	Path         string
+	SprintNumber   int
+	Score          evScore
+	Verdict        string
+	Path           string
+	EvaluationPath string
 }
 
 type evScore struct{ Total int }
