@@ -34,6 +34,7 @@ func Execute(version string) error {
 		newSprintCmd(),
 		newContractCmd(),
 		newRunCmd(version),
+		newUICmd(version),
 		newProgressCmd(),
 		newTrendCmd(),
 		newExplainCmd(),

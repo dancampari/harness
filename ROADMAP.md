@@ -88,6 +88,16 @@ Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 - [x] Generated hook resolves the repository root before checking Harness state
 - [x] Regression test covers hook generation for repos without Harness config
 
+## v0.4.8 - Terminal UI Dashboard
+
+- [x] Add `harness ui` as a dedicated TUI entrypoint
+- [x] Replace the monolithic sprint/debug panel with six navigable views
+- [x] Add Overview cards for current run, quality gate, pipeline, history, and activity
+- [x] Add Runs, Report, Logs, Skills, and Doctor views
+- [x] Add responsive full, medium, compact, and tiny layouts
+- [x] Load new run artifacts from `.harness/current-run.json` and `.harness/runs/*`
+- [x] Preserve fallback support for legacy contracts/reports/progress artifacts
+
 ## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit

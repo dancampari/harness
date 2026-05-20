@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.7
+npx github:dancampari/harness#v0.4.8
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -56,12 +56,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.7 --yes
-npx github:dancampari/harness#v0.4.7 --cli codex --yes
-npx github:dancampari/harness#v0.4.7 --cli claude --yes
-npx github:dancampari/harness#v0.4.7 --cli cursor --yes
-npx github:dancampari/harness#v0.4.7 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.4.7 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.4.8 --yes
+npx github:dancampari/harness#v0.4.8 --cli codex --yes
+npx github:dancampari/harness#v0.4.8 --cli claude --yes
+npx github:dancampari/harness#v0.4.8 --cli cursor --yes
+npx github:dancampari/harness#v0.4.8 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.4.8 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -84,8 +84,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.7 --yes
-npx github:dancampari/harness#v0.4.7 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.8 --yes
+npx github:dancampari/harness#v0.4.8 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -99,21 +99,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.7 contract propose
-npx github:dancampari/harness#v0.4.7 contract approve --role planner
-npx github:dancampari/harness#v0.4.7 contract approve --role tester
+npx github:dancampari/harness#v0.4.8 contract propose
+npx github:dancampari/harness#v0.4.8 contract approve --role planner
+npx github:dancampari/harness#v0.4.8 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.7 sprint qa
-npx github:dancampari/harness#v0.4.7 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.7 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.4.7 sprint repair
-npx github:dancampari/harness#v0.4.7 sprint score
-npx github:dancampari/harness#v0.4.7 run --resume
+npx github:dancampari/harness#v0.4.8 sprint qa
+npx github:dancampari/harness#v0.4.8 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.8 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.4.8 sprint repair
+npx github:dancampari/harness#v0.4.8 sprint score
+npx github:dancampari/harness#v0.4.8 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -350,56 +350,60 @@ available sensor.
 
 ### Live TUI
 
-`harness run --resume` opens a full-screen Bubble Tea interface. It animates
-pipeline spinners every 150ms and refreshes `.harness/` artifacts every 750ms,
-so calls made autonomously by Codex, Claude Code, or Cursor show up as soon as
-`harness sprint new`, `harness sprint qa`, or `harness sprint score` write
-contracts, reports, or progress.
+`harness ui` or `harness run --resume` opens a full-screen Bubble Tea
+interface. It refreshes `.harness/` artifacts every 750ms, so calls made
+autonomously by Codex, Claude Code, or Cursor show up as soon as Harness writes
+contracts, run state, reports, events, or progress.
 
-The sprint table now behaves like a pipeline dashboard: each stage has a
-fixed-width cell, active work shows a spinner, completed work shows a check, and
-the score cell shows the last QA score as soon as QA finishes. It only shows a
-check after `harness sprint score` consolidates progress. Long goals stay inside
-the Goal column and are truncated instead of pushing QA or Score out of
-alignment.
+The UI is organized as a terminal dashboard with six views:
 
-When QA writes `.harness/reports/latest.json`, the Verdict panel opens
-automatically inside the TUI. It summarizes the latest sprint verdict,
-dimension scores, thresholds, findings, and sensors without requiring the user
-to open the markdown report manually.
+- Overview: current run, quality gate, pipeline, run history, and activity.
+- Runs: selectable run history with status, score, duration, agent, and report.
+- Report: latest Markdown report preview, with a simple terminal renderer.
+- Logs: recent `events.jsonl` and `commands.log` entries.
+- Skills: active skills, suggested skills, categories, and adapters.
+- Doctor: detected stack, package manager, scripts, validations, alerts, files,
+  and risks.
+
+The layout adapts to terminal width. Wide terminals show cards side by side,
+medium terminals reduce columns, compact terminals stack cards, and very small
+terminals fall back to a minimal status summary.
 
 Controls inside the TUI:
 
-- `:` or `c` opens the command prompt.
+- `1-6` switches views.
+- `tab` switches to the next view.
+- `enter` opens details for the selected run.
+- `o` opens the latest report.
+- `d` opens Doctor.
+- `:` opens the command prompt.
 - `qa`, `accept`, `score`, `status`, `doctor`, `propose`, `approve tester`,
   and `approve planner` run Harness commands without leaving the dashboard.
 - `!<shell command>` runs a shell command from the project root.
-- `Up/Down` scrolls Activity; `PgUp/PgDn` scrolls Sprints.
+- `Up/Down` navigates lists or scrolls the active view.
 - `r` refreshes and `q` quits.
 
 The TUI uses the terminal alternate screen, so native scrollbar visibility is
 terminal-dependent. When content exceeds the viewport, Harness shows internal
-range labels like `Activity 1-6/12` and `Sprints 3-8/15`.
+range labels like `Report 1-12/40` or `Events 3-10/80`.
 
 ```text
-harness  Autonomous Development Pipeline   v0.4.7
+harness   Autonomous Development Pipeline   v0.4.8       Project: harness-demo   Agent: codex   Status: PASS
 
-#    Goal                         Contract     Build     QA        Score   Time    Find
-001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    98      2.5s    0
+[1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 
-Verdict
-sprint 001  PASS  score 98/100  runtime 2.5s
-Dimension        Score    Threshold   Status     Find   Sensors
-contract         100      80          ✓ pass     0      contract-validator
-coverage         87       70          ✓ pass     0      vitest-coverage
-e2e              100      70          ✓ pass     0      playwright
+CURRENT RUN                         QUALITY GATE
+Sprint 004                          Score
+Exportar helpers formatados         98 /100
+Status   : PASS                     ###################-
+Agent    : codex                    Dimension       Score   Threshold   Status
+Runtime  : 2.7s                     correctness     100     80          PASS
 
-Activity
-watching .harness  last event: qa report updated  updated just now
-QA PASS  sprint 001  score 98/100  runtime 2.5s
+PIPELINE
+Contract  ->  Build  ->  QA  ->  Report  ->  Accept
+AGREED        DONE       PASS    DONE        DONE
 
-ready   project harness-demo   sprint 1/1   avg score 98   watch just now: qa report updated   elapsed 2m
-[: command] qa | accept | score | status | doctor | !shell    [r refresh | q quit | arrows scroll]
+[enter] Details   [o] Open Report   [d] Doctor   [1-6] Switch View   [r] Refresh   [q] Quit
 ```
 
 ## Strict Pass Policy
@@ -553,6 +557,7 @@ harness sprint repair
 harness sprint score [--allow-fail]
 harness sprint list
 harness run [--resume]
+harness ui [--resume]
 harness progress
 harness trend
 harness explain <finding-id>

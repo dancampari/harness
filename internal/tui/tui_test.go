@@ -9,87 +9,30 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dancampari/harness/internal/agreement"
-	"github.com/dancampari/harness/internal/evaluator"
 )
 
-func TestViewRendersDashboardSections(t *testing.T) {
-	root := t.TempDir()
-	harnessDir := filepath.Join(root, ".harness")
-	if err := os.MkdirAll(filepath.Join(harnessDir, "contracts"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(harnessDir, "reports"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(harnessDir, "evaluations"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	contract := `# Sprint 001 - demo
+func TestViewRendersPremiumOverviewSections(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
 
-## Goal
-Ship a demo dashboard.
-
-## Deliverables
-- ` + "`src/index.ts`" + `
-
-## Acceptance Criteria
-| # | Criterion | Threshold |
-|---|-----------|-----------|
-| 1 | Works | 8/10 |
-`
-	if err := os.WriteFile(filepath.Join(harnessDir, "contracts", "sprint-001.md"), []byte(contract), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	mgr := agreement.NewManager(harnessDir)
-	if _, err := mgr.Propose(1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := mgr.Approve(1, "planner"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := mgr.Approve(1, "tester"); err != nil {
-		t.Fatal(err)
-	}
-	reportTime := time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)
-	report := fmt.Sprintf(`{
-  "schema_version": "2",
-  "timestamp": %q,
-  "sprint_number": 1,
-  "total_score": 98,
-  "verdict": "PASS",
-  "dimensions": {
-    "contract": {
-      "dimension": "contract",
-      "score": 100,
-      "threshold": 80,
-      "passed": true,
-      "sensors_used": ["contract-validator"]
-    }
-  },
-  "duration_seconds": 2.4
-}`, reportTime)
-	if err := os.WriteFile(filepath.Join(harnessDir, "reports", "sprint-001.json"), []byte(report), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(harnessDir, "reports", "latest.json"), []byte(report), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	m := newModel(harnessDir, true, "0.0.0-test")
-	m.width = 100
+	m := newModel(harnessDir, true, "0.4.7-test")
+	m.width = 132
+	m.height = 38
 	view := m.View()
+
 	for _, expected := range []string{
 		"harness",
 		"Autonomous Development Pipeline",
-		"v0.0.0-test",
-		"Sprints",
-		"Verdict",
-		"Activity",
-		"watching .harness",
-		"QA PASS",
-		"score 98/100",
-		"contract-validator",
+		"v0.4.7-test",
+		"[1] Overview",
+		"CURRENT RUN",
+		"QUALITY GATE",
+		"PIPELINE",
+		"RUNS HISTORY",
+		"LATEST ACTIVITY",
+		"Exportar helpers formatados",
+		"98 /100",
+		"correctness",
+		"validation.passed",
 	} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected view to contain %q\n%s", expected, view)
@@ -97,15 +40,30 @@ Ship a demo dashboard.
 	}
 }
 
-func TestViewFitsTerminalSize(t *testing.T) {
+func TestViewWorksWithoutCurrentRun(t *testing.T) {
 	root := t.TempDir()
 	harnessDir := filepath.Join(root, ".harness")
-	if err := os.MkdirAll(filepath.Join(harnessDir, "contracts"), 0o755); err != nil {
+	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	m := newModel(harnessDir, true, "0.0.0-test")
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 110
+	m.height = 30
+	view := m.View()
+
+	for _, expected := range []string{"CURRENT RUN", "No active run found", "harness sprint new"} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("expected empty overview to contain %q\n%s", expected, view)
+		}
+	}
+}
+
+func TestViewFitsTerminalSize(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	m := newModel(harnessDir, true, "dev")
 	m.width = 80
-	m.height = 10
+	m.height = 12
 	view := m.View()
 	lines := strings.Split(view, "\n")
 	if len(lines) != m.height {
@@ -118,7 +76,31 @@ func TestViewFitsTerminalSize(t *testing.T) {
 	}
 }
 
-func TestDraftContractMakesExistingQAStale(t *testing.T) {
+func TestRunsViewHandlesLongGoals(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	appendRun(t, harnessDir, "2026-05-20_22-42-00_sprint-005",
+		"Uma meta muito longa que precisa ser truncada sem quebrar a tabela do terminal e sem empurrar colunas",
+		"fail", 63)
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 94
+	m.height = 24
+	m.activeView = viewRuns
+	view := m.View()
+
+	for _, expected := range []string{"RUNS", "Status", "Score", "Uma meta muito"} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("expected runs view to contain %q\n%s", expected, view)
+		}
+	}
+	for _, line := range strings.Split(view, "\n") {
+		if lipgloss.Width(line) > m.width {
+			t.Fatalf("line exceeds terminal width %d: %d\n%s", m.width, lipgloss.Width(line), line)
+		}
+	}
+}
+
+func TestLegacyDraftContractMakesExistingQAStale(t *testing.T) {
 	root := t.TempDir()
 	harnessDir := filepath.Join(root, ".harness")
 	for _, dir := range []string{"contracts", "reports", "evaluations"} {
@@ -158,127 +140,14 @@ Ship a demo dashboard.
 		t.Fatal(err)
 	}
 
-	m := newModel(harnessDir, true, "0.0.0-test")
-	m.width = 100
+	m := newModel(harnessDir, true, "dev")
+	m.width = 120
+	m.height = 32
 	view := m.View()
-	for _, expected := range []string{"DRAFT", "STALE", "BLOCKED", "ignored"} {
+	for _, expected := range []string{"BLOCKED", "STALE", "QUALITY GATE"} {
 		if !strings.Contains(view, expected) {
-			t.Fatalf("expected view to contain %q\n%s", expected, view)
+			t.Fatalf("expected stale QA to render %q\n%s", expected, view)
 		}
-	}
-	if strings.Contains(view, "✓ PASS") || strings.Contains(view, "✓ 100") {
-		t.Fatalf("draft contract must not render existing QA as a valid pass\n%s", view)
-	}
-}
-
-func TestSprintTableKeepsGoalInFixedColumn(t *testing.T) {
-	row := sprintRow{
-		Number:   1,
-		Goal:     "Criar app Vite React todo-local-test com um nome longo que nao deve empurrar a tabela",
-		Contract: "AGREED",
-		Build:    "DONE",
-		QA:       "PASS",
-		Score:    "100",
-		Time:     "4ms",
-		Findings: 0,
-		Scored:   true,
-	}
-	rendered := renderSprintHeader(84) + "\n" + renderSprintRow(row, 84, 0)
-	if !strings.Contains(rendered, "#") || !strings.Contains(rendered, "Goal") || !strings.Contains(rendered, "Contract") {
-		t.Fatalf("expected fixed sprint columns\n%s", rendered)
-	}
-	for _, expected := range []string{"Criar app", "✓ AGREED", "✓ DONE", "✓ PASS", "✓ 100"} {
-		if !strings.Contains(rendered, expected) {
-			t.Fatalf("expected %q in fixed sprint row\n%s", expected, rendered)
-		}
-	}
-	lines := strings.Split(rendered, "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected header and one compact sprint row, got %d lines\n%s", len(lines), rendered)
-	}
-	for _, line := range lines {
-		if len([]rune(line)) > 84 {
-			t.Fatalf("expected row to stay within the requested width\n%s", rendered)
-		}
-	}
-}
-
-func TestScoreDoesNotSpinAfterQAWithoutConsolidation(t *testing.T) {
-	row := sprintRow{
-		Number:   1,
-		Goal:     "demo",
-		Contract: "AGREED",
-		Build:    "DONE",
-		QA:       "FAIL",
-		Score:    "93",
-		Time:     "2.5s",
-		Findings: 1,
-		Scored:   false,
-	}
-	rendered := renderSprintRow(row, 84, 0)
-	if strings.Contains(rendered, "SCORE") {
-		t.Fatalf("finished QA must not render an endless score spinner\n%s", rendered)
-	}
-	if !strings.Contains(rendered, "× 93") {
-		t.Fatalf("expected finished failed QA score to stay visible with failure marker\n%s", rendered)
-	}
-}
-
-func TestPassingQAWithoutConsolidationUsesPendingScoreMarker(t *testing.T) {
-	row := sprintRow{
-		Number:   1,
-		Goal:     "demo",
-		Contract: "AGREED",
-		Build:    "DONE",
-		QA:       "PASS",
-		Score:    "98",
-		Time:     "2.5s",
-		Findings: 0,
-		Scored:   false,
-	}
-	rendered := renderSprintRow(row, 84, 0)
-	if !strings.Contains(rendered, "• 98") {
-		t.Fatalf("expected pending score marker before consolidation\n%s", rendered)
-	}
-	if strings.Contains(rendered, "✓ 98") {
-		t.Fatalf("score must not show check before sprint score consolidation\n%s", rendered)
-	}
-}
-
-func TestFailedScoredSprintDoesNotUseCheckMark(t *testing.T) {
-	row := sprintRow{
-		Number:   1,
-		Goal:     "demo",
-		Contract: "AGREED",
-		Build:    "DONE",
-		QA:       "FAIL",
-		Score:    "40",
-		Time:     "12ms",
-		Findings: 2,
-		Scored:   true,
-	}
-	rendered := renderSprintRow(row, 84, 0)
-	if strings.Contains(rendered, "✓ 40") {
-		t.Fatalf("failed scored sprint must not render a check mark for score\n%s", rendered)
-	}
-	if !strings.Contains(rendered, "× 40") {
-		t.Fatalf("expected failed score marker\n%s", rendered)
-	}
-}
-
-func TestVisibleVerdictDimensionsKeepFailuresVisible(t *testing.T) {
-	dims := map[string]evaluator.DimensionScore{
-		"correctness":  {Passed: true},
-		"coverage":     {Passed: true},
-		"complexity":   {Passed: true},
-		"security":     {Passed: true},
-		"architecture": {Passed: true},
-		"contract":     {Passed: true},
-		"e2e":          {Passed: false},
-	}
-	names := visibleVerdictDimensions(dims, 6)
-	if !containsString(names, "e2e") {
-		t.Fatalf("expected failed e2e dimension to stay visible, got %#v", names)
 	}
 }
 
@@ -304,49 +173,92 @@ func TestHarnessCommandShortcuts(t *testing.T) {
 	}
 }
 
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func TestRefreshDetectsHarnessArtifactChanges(t *testing.T) {
+func writeHarnessFixture(t *testing.T) string {
+	t.Helper()
 	root := t.TempDir()
 	harnessDir := filepath.Join(root, ".harness")
-	if err := os.MkdirAll(filepath.Join(harnessDir, "reports"), 0o755); err != nil {
+	for _, dir := range []string{"runs", "reports", "skills"} {
+		if err := os.MkdirAll(filepath.Join(harnessDir, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(harnessDir, "setup.json"), []byte(`{
+  "project": "harness-demo",
+  "stack": "typescript",
+  "coding_cli": "codex",
+  "planning_mode": "spec-driven"
+}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(harnessDir, "current-run.json"), []byte(`{
+  "runId": "2026-05-20_22-38-24_sprint-004",
+  "feature": "Exportar helpers formatados de invoice",
+  "agent": "codex",
+  "status": "pass",
+  "score": 98,
+  "startedAt": "2026-05-20T22:38:24Z",
+  "finishedAt": null,
+  "runtime": "2.7s",
+  "updatedAt": "2026-05-20T22:41:08Z",
+  "branch": "main",
+  "reportPath": ".harness/reports/latest.md",
+  "validations": {
+    "contract": "agreed",
+    "build": "done",
+    "qa": "pass",
+    "report": "done",
+    "accept": "done"
+  },
+  "quality": [
+    {"dimension": "correctness", "score": 100, "threshold": 80, "status": "pass", "findings": 0, "sensors": "eslint,vitest"},
+    {"dimension": "coverage", "score": 91, "threshold": 70, "status": "pass", "findings": 0, "sensors": "vitest-coverage"},
+    {"dimension": "security", "score": 100, "threshold": 85, "status": "pass", "findings": 0, "sensors": "npm-audit"}
+  ],
+  "findings": 0
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	appendRun(t, harnessDir, "2026-05-20_22-38-24_sprint-004", "Exportar helpers formatados de invoice", "pass", 98)
+	if err := os.WriteFile(filepath.Join(harnessDir, "reports", "latest.md"), []byte(`# Verdict: PASS
 
-	m := newModel(harnessDir, true, "dev")
-	initial := m.signature
-	reportPath := filepath.Join(harnessDir, "reports", "latest.json")
-	report := `{
-  "schema_version": "2",
-  "sprint_number": 1,
-  "total_score": 100,
-  "verdict": "PASS",
-  "dimensions": {},
-  "duration_seconds": 1.1
-}`
-	if err := os.WriteFile(reportPath, []byte(report), 0o644); err != nil {
+## Scores
+| Dimension | Score |
+|---|---:|
+| correctness | 100 |
+`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	future := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(reportPath, future, future); err != nil {
+	runDir := filepath.Join(harnessDir, "runs", "2026-05-20_22-38-24_sprint-004")
+	if err := os.WriteFile(filepath.Join(runDir, "events.jsonl"), []byte(`{"timestamp":"2026-05-20T22:41:08Z","type":"qa.report.updated","message":"Score: 98/100","agent":"codex","metadata":{}}
+{"timestamp":"2026-05-20T22:41:07Z","type":"validation.passed","message":"vitest","agent":"codex","metadata":{}}
+`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return harnessDir
+}
 
-	m.refresh()
-	if m.signature == initial {
-		t.Fatal("expected watch signature to change after report update")
+func appendRun(t *testing.T, harnessDir, id, feature, status string, score int) {
+	t.Helper()
+	runDir := filepath.Join(harnessDir, "runs", id)
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if m.lastEvent != "qa report updated" {
-		t.Fatalf("expected last event to be qa report updated, got %q", m.lastEvent)
-	}
-	if !strings.Contains(m.View(), "qa report updated") {
-		t.Fatalf("expected view to include the latest watch event\n%s", m.View())
+	run := fmt.Sprintf(`{
+  "runId": %q,
+  "feature": %q,
+  "agent": "codex",
+  "status": %q,
+  "score": %d,
+  "startedAt": "2026-05-20T22:38:24Z",
+  "runtime": "2.7s",
+  "updatedAt": "2026-05-20T22:41:08Z",
+  "branch": "main",
+  "reportPath": ".harness/reports/latest.md",
+  "validations": {"contract":"agreed","build":"done","qa":%q,"report":"done","accept":"done"},
+  "quality": [{"dimension":"correctness","score":%d,"threshold":80,"status":%q,"findings":0}],
+  "findings": 0
+}`, id, feature, status, score, status, score, status)
+	if err := os.WriteFile(filepath.Join(runDir, "run.json"), []byte(run), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

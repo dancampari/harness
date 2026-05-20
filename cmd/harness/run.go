@@ -9,11 +9,14 @@ func newRunCmd(version string) *cobra.Command {
 	var resume bool
 	cmd := &cobra.Command{
 		Use:   "run",
-		Short: "Launch the live TUI pipeline (Sprints / Activity / Status bar)",
-		Long: `Opens the live TUI showing the pipeline state:
-  - Sprints table (Contract/Build/QA/Score per row)
-  - Activity log (current step, recent findings)
-  - Status bar (active sprint, average score, elapsed time)
+		Short: "Launch the live TUI pipeline dashboard",
+		Long: `Opens the live TUI showing the Harness pipeline:
+  - Overview dashboard
+  - Runs history
+  - Latest report
+  - Logs
+  - Skills
+  - Doctor
 
 Use --resume to load existing state from .harness/.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -26,4 +29,18 @@ Use --resume to load existing state from .harness/.`,
 
 func runTUI(resume bool, version string) error {
 	return tui.Run(".harness", resume, version)
+}
+
+func newUICmd(version string) *cobra.Command {
+	var resume bool
+	cmd := &cobra.Command{
+		Use:   "ui",
+		Short: "Launch the Harness terminal UI",
+		Long:  "Opens the Harness terminal UI. This is an alias for the live pipeline dashboard.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTUI(resume, version)
+		},
+	}
+	cmd.Flags().BoolVar(&resume, "resume", true, "resume from existing state")
+	return cmd
 }
