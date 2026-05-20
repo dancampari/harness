@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.10
+npx github:dancampari/harness#v0.4.11
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -56,12 +56,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.10 --yes
-npx github:dancampari/harness#v0.4.10 --cli codex --yes
-npx github:dancampari/harness#v0.4.10 --cli claude --yes
-npx github:dancampari/harness#v0.4.10 --cli cursor --yes
-npx github:dancampari/harness#v0.4.10 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.4.10 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.4.11 --yes
+npx github:dancampari/harness#v0.4.11 --cli codex --yes
+npx github:dancampari/harness#v0.4.11 --cli claude --yes
+npx github:dancampari/harness#v0.4.11 --cli cursor --yes
+npx github:dancampari/harness#v0.4.11 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.4.11 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -84,8 +84,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.10 --yes
-npx github:dancampari/harness#v0.4.10 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.11 --yes
+npx github:dancampari/harness#v0.4.11 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -99,21 +99,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.10 contract propose
-npx github:dancampari/harness#v0.4.10 contract approve --role planner
-npx github:dancampari/harness#v0.4.10 contract approve --role tester
+npx github:dancampari/harness#v0.4.11 contract propose
+npx github:dancampari/harness#v0.4.11 contract approve --role planner
+npx github:dancampari/harness#v0.4.11 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.10 sprint qa
-npx github:dancampari/harness#v0.4.10 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.10 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.4.10 sprint repair
-npx github:dancampari/harness#v0.4.10 sprint score
-npx github:dancampari/harness#v0.4.10 run --resume
+npx github:dancampari/harness#v0.4.11 sprint qa
+npx github:dancampari/harness#v0.4.11 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.11 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.4.11 sprint repair
+npx github:dancampari/harness#v0.4.11 sprint score
+npx github:dancampari/harness#v0.4.11 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -348,6 +348,12 @@ do not include the repair loop. Missing optional alternatives, such as Jest in a
 Vitest project, remain warnings as long as the active dimension has another
 available sensor.
 
+Use `harness doctor --fix` when Doctor reports safe local config drift, such as
+a TypeScript project whose `.harness/config.yaml` still has only the contract
+gate and no adapters. The fix command restores detected stack defaults and
+adapter lists, and refreshes `.harness/.gitignore`. It does not install package
+dependencies, rewrite contracts, alter reports, or change project code.
+
 ### Live TUI
 
 `harness ui` or `harness run --resume` opens a full-screen Bubble Tea
@@ -388,7 +394,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Report 1-12/40` or `Events 3-10/80`.
 
 ```text
-harness   Autonomous Development Pipeline   v0.4.10      Project: harness-demo   Agent: codex   Status: PASS
+harness   Autonomous Development Pipeline   v0.4.11      Project: harness-demo   Agent: codex   Status: PASS
 
 [1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 

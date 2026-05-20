@@ -115,6 +115,14 @@ Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 - [x] Improve selected-row and status styling without full-row color flooding
 - [x] Keep the release header version aligned with packaged builds
 
+## v0.4.11 - Doctor Auto-Fix
+
+- [x] Add `harness doctor --fix` for safe Harness config drift repair
+- [x] Restore detected stack defaults when a project is stuck in contract-only validation
+- [x] Reconfigure missing adapter lists without touching contracts, reports, or project source
+- [x] Repair generated `.harness/.gitignore` entries for local artifacts
+- [x] Keep the TUI Doctor suggestion aligned with an actual CLI command
+
 ## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit

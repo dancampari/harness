@@ -33,6 +33,67 @@ func TestDoctorStrictAllowsContractOnlyHarnessWithWarnings(t *testing.T) {
 	}
 }
 
+func TestDoctorFixUpgradesContractOnlyTypeScriptConfig(t *testing.T) {
+	root := t.TempDir()
+	writeDoctorFile(t, root, "package.json", `{"name":"demo","devDependencies":{"vitest":"latest","eslint":"latest"}}`)
+	writeDoctorFile(t, root, "tsconfig.json", `{}`)
+	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
+	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
+
+	if err := runDoctorWithOptions(root, doctorOptions{Fix: true}); err != nil {
+		t.Fatalf("doctor --fix failed: %v", err)
+	}
+
+	cfg, err := config.Load(filepath.Join(root, ".harness", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Stack != "typescript" {
+		t.Fatalf("expected stack to be fixed to typescript, got %q", cfg.Stack)
+	}
+	for _, dim := range []string{
+		config.DimCorrectness,
+		config.DimCoverage,
+		config.DimComplexity,
+		config.DimSecurity,
+		config.DimArchitecture,
+		config.DimContract,
+		config.DimE2E,
+	} {
+		if cfg.ThresholdFor(dim) == 0 || cfg.WeightFor(dim) == 0 {
+			t.Fatalf("expected %s to be active after doctor --fix", dim)
+		}
+	}
+	for _, sensor := range []string{"eslint", "vitest", "vitest-coverage", "npm-audit", "js-complexity", "js-architecture", "playwright"} {
+		if !containsString(cfg.AllAdapterNames(), sensor) {
+			t.Fatalf("expected adapter %q after doctor --fix, got %#v", sensor, cfg.AllAdapterNames())
+		}
+	}
+	if !hasGeneratedIgnore(filepath.Join(root, ".harness", ".gitignore")) {
+		t.Fatal("expected doctor --fix to repair .harness/.gitignore")
+	}
+}
+
+func TestDoctorFixCreatesMissingConfigWhenHarnessExists(t *testing.T) {
+	root := t.TempDir()
+	writeDoctorFile(t, root, "package.json", `{"name":"demo"}`)
+	writeDoctorFile(t, root, "tsconfig.json", `{}`)
+	if err := os.MkdirAll(filepath.Join(root, ".harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runDoctorWithOptions(root, doctorOptions{Fix: true}); err != nil {
+		t.Fatalf("doctor --fix failed: %v", err)
+	}
+	cfg, err := config.Load(filepath.Join(root, ".harness", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Stack != "typescript" || len(cfg.AllAdapterNames()) == 0 {
+		t.Fatalf("expected generated TypeScript config with adapters, got stack=%q adapters=%#v", cfg.Stack, cfg.AllAdapterNames())
+	}
+}
+
 func TestDoctorStrictFailsOnStaleInstalledSkills(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
@@ -96,4 +157,13 @@ func writeDoctorFile(t *testing.T, root, rel, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

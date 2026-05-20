@@ -177,6 +177,7 @@ func TestHarnessCommandShortcuts(t *testing.T) {
 		"score":          {"sprint", "score"},
 		"status":         {"sprint", "status"},
 		"propose":        {"contract", "propose"},
+		"doctor --fix":   {"doctor", "--fix"},
 		"approve tester": {"contract", "approve", "--role", "tester"},
 		"new demo goal":  {"sprint", "new", "demo goal"},
 	}

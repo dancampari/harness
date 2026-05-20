@@ -15,6 +15,7 @@ import (
 
 type doctorOptions struct {
 	Strict bool
+	Fix    bool
 }
 
 type doctorFinding struct {
@@ -37,6 +38,7 @@ func newDoctorCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "exit non-zero when Harness config, sensors, or generated agent references are incomplete")
+	cmd.Flags().BoolVar(&opts.Fix, "fix", false, "repair safe Harness config drift such as missing stack defaults and adapter lists")
 	return cmd
 }
 
@@ -47,6 +49,10 @@ func runDoctor(root string) error {
 func runDoctorWithOptions(root string, opts doctorOptions) error {
 	var audit doctorAudit
 	project := detect.DetectProject(root)
+	fixes, err := applyDoctorFixes(root, project, opts)
+	if err != nil {
+		return err
+	}
 	cfg, err := loadDoctorConfig(root, project.Stack)
 	if err != nil {
 		return err
@@ -60,6 +66,17 @@ func runDoctorWithOptions(root string, opts doctorOptions) error {
 	if len(project.Frameworks) > 0 {
 		fmt.Printf("  Frameworks: %s\n", joinList(project.Frameworks))
 	}
+	if opts.Fix {
+		fmt.Println()
+		fmt.Println("Auto-fix:")
+		if len(fixes) == 0 {
+			fmt.Println("  OK no safe fixes needed")
+		} else {
+			for _, fix := range fixes {
+				fmt.Printf("  OK %s\n", fix)
+			}
+		}
+	}
 
 	if errs := cfg.Validate(); len(errs) > 0 {
 		fmt.Println()
@@ -69,6 +86,12 @@ func runDoctorWithOptions(root string, opts doctorOptions) error {
 			audit.fail(err)
 		}
 		return finishDoctor(opts, audit)
+	}
+	if stackSupportsDefaultAdapters(project.Stack) && !hasStackAdapterConfig(cfg) {
+		fmt.Println()
+		fmt.Println("Config warnings:")
+		fmt.Printf("  WARN detected %s project has no stack adapters configured; run harness doctor --fix\n", project.Stack)
+		audit.warn(fmt.Sprintf("detected %s project has no stack adapters configured", project.Stack))
 	}
 
 	reg := adapters.BuildRegistry()
@@ -111,6 +134,126 @@ func runDoctorWithOptions(root string, opts doctorOptions) error {
 
 	inspectHarnessCoverage(root, project, &audit)
 	return finishDoctor(opts, audit)
+}
+
+func applyDoctorFixes(root string, project detect.ProjectInfo, opts doctorOptions) ([]string, error) {
+	if !opts.Fix {
+		return nil, nil
+	}
+	harnessDir := filepath.Join(root, ".harness")
+	if _, err := os.Stat(harnessDir); err != nil {
+		return nil, fmt.Errorf("cannot apply doctor --fix: .harness/ is missing; run harness setup")
+	}
+
+	stack := valueOr(project.Stack, "unknown")
+	defaults := config.DefaultFor(stack)
+	cfgPath := filepath.Join(harnessDir, "config.yaml")
+	cfg, err := config.Load(cfgPath)
+	var fixes []string
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		cfg = defaults
+		fixes = append(fixes, "created .harness/config.yaml from detected stack defaults")
+	} else {
+		fixes = append(fixes, applyConfigDefaultFixes(&cfg, defaults, stack)...)
+	}
+
+	if len(fixes) > 0 {
+		if err := config.Save(cfgPath, cfg); err != nil {
+			return nil, err
+		}
+	}
+	if !hasGeneratedIgnore(filepath.Join(harnessDir, ".gitignore")) {
+		if err := ensureHarnessGitignore(harnessDir); err != nil {
+			return nil, err
+		}
+		fixes = append(fixes, "updated .harness/.gitignore for generated local artifacts")
+	}
+	return fixes, nil
+}
+
+func applyConfigDefaultFixes(cfg *config.Config, defaults config.Config, detectedStack string) []string {
+	var fixes []string
+	if cfg.Version == "" {
+		cfg.Version = defaults.Version
+		fixes = append(fixes, "set config schema version")
+	}
+	if detectedStack != "" && detectedStack != "unknown" && (cfg.Stack == "" || cfg.Stack == "unknown") {
+		cfg.Stack = detectedStack
+		fixes = append(fixes, fmt.Sprintf("set config stack to %s", detectedStack))
+	}
+	if isContractOnlyConfig(*cfg) && len(defaults.AllAdapterNames()) > 0 {
+		cfg.Thresholds = defaults.Thresholds
+		cfg.Weights = defaults.Weights
+		cfg.E2E = defaults.E2E
+		fixes = append(fixes, fmt.Sprintf("activated %s quality gate defaults", detectedStack))
+	}
+	if len(cfg.AllAdapterNames()) == 0 && len(defaults.AllAdapterNames()) > 0 {
+		cfg.Adapters = defaults.Adapters
+		fixes = append(fixes, fmt.Sprintf("configured %s default adapters", detectedStack))
+		return fixes
+	}
+	for _, dim := range cfg.ActiveDimensions() {
+		if dim == config.DimContract {
+			continue
+		}
+		if len(cfg.AdapterNamesForDimension(dim)) > 0 {
+			continue
+		}
+		names := defaults.AdapterNamesForDimension(dim)
+		if len(names) == 0 {
+			continue
+		}
+		setAdapterNamesForDimension(&cfg.Adapters, dim, names)
+		fixes = append(fixes, fmt.Sprintf("configured default %s adapters", dim))
+	}
+	return fixes
+}
+
+func isContractOnlyConfig(cfg config.Config) bool {
+	active := cfg.ActiveDimensions()
+	return len(active) == 1 && active[0] == config.DimContract
+}
+
+func stackSupportsDefaultAdapters(stack string) bool {
+	return stack == "node" || stack == "typescript"
+}
+
+func hasStackAdapterConfig(cfg config.Config) bool {
+	return len(cfg.Adapters.Lint)+
+		len(cfg.Adapters.Test)+
+		len(cfg.Adapters.Coverage)+
+		len(cfg.Adapters.Security)+
+		len(cfg.Adapters.Complexity)+
+		len(cfg.Adapters.Architecture)+
+		len(cfg.Adapters.E2E) > 0
+}
+
+func setAdapterNamesForDimension(adapters *config.AdaptersConfig, dim string, names []string) {
+	switch dim {
+	case config.DimCorrectness:
+		for _, name := range names {
+			if name == "eslint" {
+				adapters.Lint = append(adapters.Lint, name)
+			} else {
+				adapters.Test = append(adapters.Test, name)
+			}
+		}
+	case config.DimCoverage:
+		adapters.Coverage = names
+	case config.DimComplexity:
+		adapters.Complexity = names
+	case config.DimSecurity:
+		adapters.Security = names
+	case config.DimArchitecture:
+		adapters.Architecture = names
+	case config.DimBehavior:
+		adapters.Behavior = names
+	case config.DimE2E:
+		adapters.E2E = names
+	}
 }
 
 func loadDoctorConfig(root, stack string) (config.Config, error) {
