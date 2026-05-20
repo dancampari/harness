@@ -77,6 +77,34 @@ Ship a demo dashboard.
 	}
 }
 
+func TestSprintTableKeepsGoalOutOfStatusColumns(t *testing.T) {
+	row := sprintRow{
+		Number:   1,
+		Goal:     "Criar app Vite React todo-local-test com um nome longo que nao deve empurrar a tabela",
+		Contract: "AGREED",
+		Build:    "DONE",
+		QA:       "PASS",
+		Score:    "100",
+		Time:     "4ms",
+		Findings: 0,
+	}
+	rendered := renderSprintHeader(84) + "\n" + renderSprintRow(row, 84)
+	if !strings.Contains(rendered, "#") || !strings.Contains(rendered, "Contract") {
+		t.Fatalf("expected status columns first\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "AGREED") || !strings.Contains(rendered, "DONE") || !strings.Contains(rendered, "PASS") {
+		t.Fatalf("expected fixed status columns\n%s", rendered)
+	}
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.Contains(line, "AGREED") && strings.Contains(line, "Criar app") {
+			t.Fatalf("goal leaked into status row\n%s", rendered)
+		}
+	}
+	if !strings.Contains(rendered, "Goal Criar app Vite React") {
+		t.Fatalf("expected separate goal line\n%s", rendered)
+	}
+}
+
 func TestRefreshDetectsHarnessArtifactChanges(t *testing.T) {
 	root := t.TempDir()
 	harnessDir := filepath.Join(root, ".harness")

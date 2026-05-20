@@ -1,6 +1,6 @@
 {
   "name": "@dancampari/harness",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Stack-agnostic local QA harness for AI-assisted development.",
   "license": "MIT",
   "type": "commonjs",

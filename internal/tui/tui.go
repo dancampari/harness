@@ -1,7 +1,7 @@
 // Package tui renders the live "Autonomous Development Pipeline" view.
 //
 // The screen has three regions:
-//  1. Sprints table: Goal / Contract / Build / QA / Score / Time / Findings
+//  1. Sprints table: fixed status columns plus a separate goal line
 //  2. Activity log: latest QA summary, findings, or project progress lines
 //  3. Status bar: current state, sprint count, average score, watch status
 package tui
@@ -321,7 +321,7 @@ func (m *model) renderSprints(width int) string {
 	var sb strings.Builder
 	sb.WriteString(panelTitleStyle.Render("Sprints"))
 	sb.WriteString("\n")
-	sb.WriteString(renderSprintHeader())
+	sb.WriteString(renderSprintHeader(width))
 	sb.WriteString("\n")
 	if len(m.sprints) == 0 {
 		sb.WriteString(mutedStyle.Render("No sprints yet. Run: harness sprint new \"first goal\""))
@@ -336,36 +336,60 @@ func (m *model) renderSprints(width int) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-func renderSprintHeader() string {
-	return headerCellStyle.Render(fmt.Sprintf("%-4s %-34s %-12s %-9s %-9s %-7s %-7s %-8s",
-		"#", "Goal", "Contract", "Build", "QA", "Score", "Time", "Findings"))
+func renderSprintHeader(width int) string {
+	return headerCellStyle.Render(fixedSprintColumns(width, "#", "Contract", "Build", "QA", "Score", "Time", "Findings"))
 }
 
 func renderSprintRow(r sprintRow, width int) string {
-	goalWidth := maxInt(18, width-68)
-	if goalWidth > 42 {
-		goalWidth = 42
-	}
-	goal := truncate(defaultString(r.Goal, "-"), goalWidth)
-	line := fmt.Sprintf("%-4d %-*s %-12s %-9s %-9s %-7s %-7s %-8d",
-		r.Number,
-		goalWidth,
-		goal,
-		statusText(r.Contract),
-		statusText(r.Build),
-		statusText(r.QA),
+	statusLine := fixedSprintColumns(width,
+		fmt.Sprintf("%03d", r.Number),
+		stageText(r.Contract),
+		stageText(r.Build),
+		stageText(r.QA),
 		r.Score,
 		r.Time,
-		r.Findings,
+		fmt.Sprintf("%d", r.Findings),
 	)
+	goalLine := "     " + mutedStyle.Render("Goal ") + truncate(defaultString(r.Goal, "-"), maxInt(12, width-11))
 	switch strings.ToUpper(r.QA) {
 	case "PASS":
-		return goodStyle.Render(line)
+		return goodStyle.Render(statusLine) + "\n" + goalLine
 	case "FAIL":
-		return badStyle.Render(line)
+		return badStyle.Render(statusLine) + "\n" + goalLine
 	default:
-		return mutedStyle.Render(line)
+		return mutedStyle.Render(statusLine) + "\n" + goalLine
 	}
+}
+
+func fixedSprintColumns(width int, number, contract, build, qa, score, elapsed, findings string) string {
+	columns := []struct {
+		value string
+		width int
+	}{
+		{number, 4},
+		{contract, 11},
+		{build, 9},
+		{qa, 9},
+		{score, 7},
+		{elapsed, 8},
+		{findings, 8},
+	}
+	var sb strings.Builder
+	for i, col := range columns {
+		if i > 0 {
+			sb.WriteString("  ")
+		}
+		sb.WriteString(padCell(col.value, col.width))
+	}
+	return truncate(sb.String(), width)
+}
+
+func padCell(value string, width int) string {
+	value = truncate(value, width)
+	if len([]rune(value)) >= width {
+		return value
+	}
+	return value + strings.Repeat(" ", width-len([]rune(value)))
 }
 
 func (m *model) renderActivity(width int) string {
@@ -525,6 +549,23 @@ func defaultString(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func stageText(value string) string {
+	switch strings.ToUpper(value) {
+	case "AGREED":
+		return "AGREED"
+	case "DONE":
+		return "DONE"
+	case "PASS":
+		return "PASS"
+	case "FAIL":
+		return "FAIL"
+	case "DRAFT":
+		return "draft"
+	default:
+		return value
+	}
 }
 
 func statusText(value string) string {

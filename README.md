@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.7
+npx github:dancampari/harness#v0.3.8
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -53,12 +53,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.7 --yes
-npx github:dancampari/harness#v0.3.7 --cli codex --yes
-npx github:dancampari/harness#v0.3.7 --cli claude --yes
-npx github:dancampari/harness#v0.3.7 --cli cursor --yes
-npx github:dancampari/harness#v0.3.7 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.3.7 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.3.8 --yes
+npx github:dancampari/harness#v0.3.8 --cli codex --yes
+npx github:dancampari/harness#v0.3.8 --cli claude --yes
+npx github:dancampari/harness#v0.3.8 --cli cursor --yes
+npx github:dancampari/harness#v0.3.8 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.3.8 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -78,8 +78,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.7 --yes
-npx github:dancampari/harness#v0.3.7 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.8 --yes
+npx github:dancampari/harness#v0.3.8 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -93,10 +93,10 @@ contract yourself:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.7 sprint qa
-npx github:dancampari/harness#v0.3.7 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.7 sprint score
-npx github:dancampari/harness#v0.3.7 run --resume
+npx github:dancampari/harness#v0.3.8 sprint qa
+npx github:dancampari/harness#v0.3.8 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.8 sprint score
+npx github:dancampari/harness#v0.3.8 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -229,14 +229,17 @@ Claude Code, or Cursor show up as soon as `harness sprint new`,
 `harness sprint qa`, or `harness sprint score` write contracts, reports, or
 progress.
 
+The status columns are fixed-width. Long sprint goals render on their own line
+so the pipeline stages stay aligned and easy to scan.
+
 ```text
 harness  Autonomous Development Pipeline
 
 ╭──────────────────────────────────────────────────────────────╮
 │ Sprints                                                      │
-│ #    Goal                    Contract    Build    QA     Score│
-│ 001  validate harness demo   ✓ AGREED    ✓ DONE   ✓ PASS 98   │
-│                              Time 2.5s   Findings 0           │
+│ #    Contract     Build     QA        Score   Time    Findings │
+│ 001  AGREED       DONE      PASS      98      2.5s    0        │
+│      Goal validate harness demo                               │
 ╰──────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────────╮
