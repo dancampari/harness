@@ -24,7 +24,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		resized := m.syncTerminalSize()
 		now := time.Time(msg)
 		if m.lastRefresh.IsZero() || now.Sub(m.lastRefresh) >= refreshInterval {
-			m.refresh()
+			if m.activeView != viewLogs || m.logsFollow {
+				m.refresh()
+			}
 		}
 		if resized {
 			return m, tea.Batch(tea.ClearScreen, tick())
@@ -56,6 +58,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
+	if key == "" && len(msg.Runes) > 0 {
+		key = string(msg.Runes)
+	}
+	if msg.Type == tea.KeySpace && m.activeView == viewLogs {
+		m.logsFollow = !m.logsFollow
+		return m, nil
+	}
+	if m.activeView == viewDoctor && key == "f" {
+		return m.executeCommand("doctor --fix")
+	}
 	if m.helpVisible {
 		switch key {
 		case "esc", "?", "q":

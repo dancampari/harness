@@ -45,6 +45,7 @@ type model struct {
 	commandRun   string
 	commandLog   []string
 	notices      []ActivityEvent
+	logsFollow   bool
 }
 
 func newModel(root string, resume bool, version string) *model {
@@ -56,6 +57,7 @@ func newModel(root string, resume bool, version string) *model {
 		width:       118,
 		height:      32,
 		scroll:      map[viewID]int{},
+		logsFollow:  true,
 	}
 	if resume {
 		// State is file-backed; refresh below is enough.

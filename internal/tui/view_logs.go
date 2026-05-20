@@ -7,9 +7,14 @@ import (
 func (m *model) renderLogsView(width int) string {
 	header := section("Logs · stream", width)
 
-	statusBar := styles.Muted.Render("level: ") + styles.Text.Render("all") +
-		styles.Muted.Render("   ·  scope: ") + styles.Text.Render(defaultString(m.data.Current.RunID, "-")) +
-		styles.Muted.Render("   ·  follow: ") + styles.Success.Render("on")
+	stream := styles.Success.Render("live")
+	if !m.logsFollow {
+		stream = styles.Warning.Render("paused")
+	}
+	statusBar := styles.Muted.Render("showing all events") +
+		styles.Muted.Render("   ·  scope ") + styles.Text.Render(defaultString(m.data.Current.RunID, "-")) +
+		styles.Muted.Render("   ·  stream ") + stream +
+		styles.Muted.Render("   ·  command mode ") + styles.Text.Render(":")
 
 	if len(m.data.Events) == 0 && len(m.commandLog) == 0 && len(m.data.Commands) == 0 {
 		return header + "\n" + statusBar + "\n\n" + styles.Muted.Render("No events found.")
@@ -41,12 +46,6 @@ func (m *model) renderLogsView(width int) string {
 		}
 	}
 
-	// Trailing cursor — pulses via the model frame counter.
-	cursor := styles.Primary.Render("▎")
-	if m.frame%2 == 0 {
-		cursor = " "
-	}
-	lines = append(lines, "", cursor+" "+styles.Muted.Render("_"))
 	return strings.Join(lines, "\n")
 }
 

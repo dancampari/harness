@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -189,6 +190,69 @@ func TestHarnessCommandShortcuts(t *testing.T) {
 		if strings.Join(got, "\x00") != strings.Join(expected, "\x00") {
 			t.Fatalf("%s: expected %#v, got %#v", input, expected, got)
 		}
+	}
+}
+
+func TestFooterDoesNotAdvertiseMissingActions(t *testing.T) {
+	for _, tc := range []struct {
+		view      viewID
+		forbidden []string
+		required  []string
+	}{
+		{viewRuns, []string{"search"}, []string{"details", "select"}},
+		{viewLogs, []string{"search"}, []string{"pause/resume", "run command", "scroll"}},
+		{viewSkills, []string{"toggle"}, []string{"details", "scroll"}},
+		{viewDoctor, []string{"verbose"}, []string{"doctor --fix"}},
+	} {
+		keys := footerKeys(tc.view)
+		var labels []string
+		for _, key := range keys {
+			labels = append(labels, key[0], key[1])
+		}
+		joined := strings.Join(labels, " ")
+		for _, forbidden := range tc.forbidden {
+			if strings.Contains(joined, forbidden) {
+				t.Fatalf("view %v advertises unsupported action %q in %q", tc.view, forbidden, joined)
+			}
+		}
+		for _, required := range tc.required {
+			if !strings.Contains(joined, required) {
+				t.Fatalf("view %v should advertise %q in %q", tc.view, required, joined)
+			}
+		}
+	}
+}
+
+func TestLogsPauseAndDoctorFixShortcutsAreFunctional(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	m := newModel(harnessDir, true, "dev")
+	m.width = 110
+	m.height = 26
+	m.activeView = viewLogs
+
+	if !strings.Contains(stripANSI(m.View()), "stream live") {
+		t.Fatalf("expected logs to start live\n%s", m.View())
+	}
+	updated, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeySpace})
+	if cmd != nil {
+		t.Fatalf("space in logs should only toggle state")
+	}
+	m = updated.(*model)
+	if m.logsFollow {
+		t.Fatalf("expected logs follow to be paused")
+	}
+	if !strings.Contains(stripANSI(m.View()), "stream paused") {
+		t.Fatalf("expected logs view to show paused stream\n%s", m.View())
+	}
+
+	m.activeView = viewDoctor
+	updated, cmd = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if cmd == nil {
+		t.Fatalf("doctor fix shortcut should return a command")
+	}
+	m = updated.(*model)
+	if !m.commandBusy || m.commandRun != "doctor --fix" {
+		t.Fatalf("expected doctor --fix command to be queued, busy=%v run=%q", m.commandBusy, m.commandRun)
 	}
 }
 

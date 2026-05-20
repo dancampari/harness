@@ -116,15 +116,15 @@ func footerKeys(v viewID) [][2]string {
 	case viewOverview:
 		specific = [][2]string{{"enter", "details"}, {"o", "report"}, {"d", "doctor"}}
 	case viewRuns:
-		specific = [][2]string{{"enter", "open"}, {"↑↓", "select"}, {"/", "search"}}
+		specific = [][2]string{{"enter", "details"}, {"↑↓", "select"}}
 	case viewReport:
 		specific = [][2]string{{"o", "open in pager"}, {"↑↓", "scroll"}}
 	case viewLogs:
-		specific = [][2]string{{"space", "pause"}, {":", "command"}, {"/", "search"}}
+		specific = [][2]string{{"space", "pause/resume"}, {":", "run command"}, {"↑↓", "scroll"}}
 	case viewSkills:
-		specific = [][2]string{{"enter", "details"}, {"t", "toggle"}}
+		specific = [][2]string{{"enter", "details"}, {"↑↓", "scroll"}}
 	case viewDoctor:
-		specific = [][2]string{{"f", "fix"}, {"v", "verbose"}}
+		specific = [][2]string{{"f", "doctor --fix"}}
 	}
 	return append(specific, common...)
 }

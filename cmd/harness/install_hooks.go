@@ -669,7 +669,9 @@ This project uses Harness Engineering. Always:
 7. Process .harness/reports/latest.json. If verdict is FAIL, run
    ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix findings,
    and rerun QA until PASS.
-8. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
+8. If Doctor reports safe Harness config drift or says to run doctor --fix,
+   run ` + "`" + invoke + ` doctor --fix` + "`" + ` autonomously before asking the user.
+9. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
 
 Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajectory of the project.
 `
