@@ -383,6 +383,7 @@ type setupState struct {
 	CodingCLI             string `json:"coding_cli"`
 	PlanningMode          string `json:"planning_mode"`
 	ContractSkillsEnabled bool   `json:"contract_skills_enabled"`
+	InstallScope          string `json:"install_scope"`
 }
 
 func readSetupState(path string) setupState {

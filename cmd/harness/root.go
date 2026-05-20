@@ -29,6 +29,7 @@ func Execute(version string) error {
 
 	root.AddCommand(
 		newSetupCmd(version),
+		newUpgradeCmd(version),
 		newInitCmd(),
 		newSpecCmd(),
 		newSprintCmd(),
@@ -61,6 +62,7 @@ the live terminal dashboard.
 
 Workflow:
   harness                         # one-command setup
+  harness upgrade                 # refresh generated files, preserve memory/history
   harness --planning spec-driven  # setup with full spec-driven automation
   harness sprint new "<goal>"     # creates contracts/sprint-NNN.md template
   harness contract propose        # proposes the contract hash for agreement

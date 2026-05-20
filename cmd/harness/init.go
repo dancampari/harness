@@ -77,27 +77,8 @@ func runInit(opts initOptions) error {
 		return errors.New(".harness/ already exists - use --force to overwrite")
 	}
 
-	dirs := []string{
-		root,
-		filepath.Join(root, "contracts"),
-		filepath.Join(root, "approvals"),
-		filepath.Join(root, "evaluations"),
-		filepath.Join(root, "fixtures"),
-		filepath.Join(root, "repairs"),
-		filepath.Join(root, "screenshots"),
-		filepath.Join(root, "reports"),
-	}
-	if opts.PlanningMode == PlanningSpecDriven {
-		dirs = append(dirs,
-			filepath.Join(root, "context"),
-			filepath.Join(root, "design"),
-			filepath.Join(root, "tasks"),
-		)
-	}
-	for _, d := range dirs {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			return fmt.Errorf("mkdir %s: %w", d, err)
-		}
+	if err := ensureHarnessSkeleton(root, opts.PlanningMode); err != nil {
+		return err
 	}
 
 	project := detect.DetectProject(".")
@@ -172,6 +153,32 @@ func runInit(opts initOptions) error {
 		fmt.Println("    1. Edit .harness/spec.md with your product spec")
 		fmt.Printf("    2. %s install-hooks --interactive    # choose Codex, Claude Code, or Cursor\n", invoke)
 		fmt.Printf("    3. %s sprint new \"first goal\"\n", invoke)
+	}
+	return nil
+}
+
+func ensureHarnessSkeleton(root, planningMode string) error {
+	dirs := []string{
+		root,
+		filepath.Join(root, "contracts"),
+		filepath.Join(root, "approvals"),
+		filepath.Join(root, "evaluations"),
+		filepath.Join(root, "fixtures"),
+		filepath.Join(root, "repairs"),
+		filepath.Join(root, "screenshots"),
+		filepath.Join(root, "reports"),
+	}
+	if normalizePlanningMode(planningMode) == PlanningSpecDriven {
+		dirs = append(dirs,
+			filepath.Join(root, "context"),
+			filepath.Join(root, "design"),
+			filepath.Join(root, "tasks"),
+		)
+	}
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", d, err)
+		}
 	}
 	return nil
 }
