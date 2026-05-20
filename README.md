@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.6
+npx github:dancampari/harness#v0.4.7
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -56,12 +56,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.6 --yes
-npx github:dancampari/harness#v0.4.6 --cli codex --yes
-npx github:dancampari/harness#v0.4.6 --cli claude --yes
-npx github:dancampari/harness#v0.4.6 --cli cursor --yes
-npx github:dancampari/harness#v0.4.6 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.4.6 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.4.7 --yes
+npx github:dancampari/harness#v0.4.7 --cli codex --yes
+npx github:dancampari/harness#v0.4.7 --cli claude --yes
+npx github:dancampari/harness#v0.4.7 --cli cursor --yes
+npx github:dancampari/harness#v0.4.7 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.4.7 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -84,8 +84,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.6 --yes
-npx github:dancampari/harness#v0.4.6 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.7 --yes
+npx github:dancampari/harness#v0.4.7 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -99,21 +99,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.6 contract propose
-npx github:dancampari/harness#v0.4.6 contract approve --role planner
-npx github:dancampari/harness#v0.4.6 contract approve --role tester
+npx github:dancampari/harness#v0.4.7 contract propose
+npx github:dancampari/harness#v0.4.7 contract approve --role planner
+npx github:dancampari/harness#v0.4.7 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.6 sprint qa
-npx github:dancampari/harness#v0.4.6 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.6 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.4.6 sprint repair
-npx github:dancampari/harness#v0.4.6 sprint score
-npx github:dancampari/harness#v0.4.6 run --resume
+npx github:dancampari/harness#v0.4.7 sprint qa
+npx github:dancampari/harness#v0.4.7 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.7 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.4.7 sprint repair
+npx github:dancampari/harness#v0.4.7 sprint score
+npx github:dancampari/harness#v0.4.7 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -382,7 +382,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Activity 1-6/12` and `Sprints 3-8/15`.
 
 ```text
-harness  Autonomous Development Pipeline   v0.4.6
+harness  Autonomous Development Pipeline   v0.4.7
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    98      2.5s    0

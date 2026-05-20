@@ -489,6 +489,11 @@ func installGitHook() error {
 	path := filepath.Join(dir, "pre-push")
 	content := fmt.Sprintf(`#!/bin/sh
 # harness pre-push hook - reports only, never blocks
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$repo_root" || exit 0
+if [ ! -f ".harness/config.yaml" ]; then
+  exit 0
+fi
 %s sprint qa --format=tty || true
 exit 0
 `, harnessInvocation())

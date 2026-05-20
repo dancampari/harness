@@ -82,6 +82,12 @@ Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 - [x] Add tests for setup migration, skill generation, stale detection, and provider reference content
 - [x] Validate end-to-end in `harness-demo` from prompt -> contract -> agreement -> implementation -> QA -> score
 
+## v0.4.7 - Git Hook Quiet Mode
+
+- [x] Git pre-push hook skips repositories that do not have `.harness/config.yaml`
+- [x] Generated hook resolves the repository root before checking Harness state
+- [x] Regression test covers hook generation for repos without Harness config
+
 ## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit
