@@ -76,7 +76,7 @@ func (e ESLint) Run(ctx context.Context, root string) sensors.Result {
 	// eslint's config decide which files to include.
 	// --no-error-on-unmatched-pattern avoids spurious failures when the
 	// project hasn't set up file patterns.
-	cmd := exec.CommandContext(ctx, "npx", "--no-install", "eslint",
+	cmd := nodeToolCommand(ctx, root, "eslint",
 		"--format", "json",
 		"--no-error-on-unmatched-pattern",
 		".")

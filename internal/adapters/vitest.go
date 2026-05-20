@@ -43,7 +43,7 @@ func (v Vitest) Run(ctx context.Context, root string) sensors.Result {
 		SensorName: v.Name(),
 		Dimension:  v.Dimension(),
 	}
-	cmd := exec.CommandContext(ctx, "npx", "--no-install", "vitest", "run", "--reporter=json")
+	cmd := nodeToolCommand(ctx, root, "vitest", "run", "--reporter=json")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	res.Duration = time.Since(start)

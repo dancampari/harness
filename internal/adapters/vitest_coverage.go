@@ -28,7 +28,7 @@ func (v VitestCoverage) Run(ctx context.Context, root string) sensors.Result {
 		SensorName: v.Name(),
 		Dimension:  v.Dimension(),
 	}
-	cmd := exec.CommandContext(ctx, "npx", "--no-install", "vitest", "run",
+	cmd := nodeToolCommand(ctx, root, "vitest", "run",
 		"--coverage",
 		"--coverage.reporter=json-summary",
 		"--coverage.reporter=lcov")

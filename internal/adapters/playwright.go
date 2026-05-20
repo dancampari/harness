@@ -98,7 +98,7 @@ func (p Playwright) Run(ctx context.Context, root string) sensors.Result {
 	// across versions.
 	reportPath := filepath.Join(root, ".harness", "reports", "playwright.json")
 	_ = os.MkdirAll(filepath.Dir(reportPath), 0o755)
-	cmd := exec.CommandContext(ctx, "npx", "--no-install", "playwright", "test",
+	cmd := nodeToolCommand(ctx, root, "playwright", "test",
 		"--reporter=json",
 		"--output=.harness/playwright/results")
 	cmd.Dir = root

@@ -267,6 +267,7 @@ func (m *Manager) RunQAInternal(stdout io.Writer, acceptScreenshots, acceptFixtu
 func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots, acceptFixtures bool) []string {
 	allowed := map[string]bool{
 		"PATH":         true, // find binaries
+		"Path":         true, // Windows preserves this casing in many shells
 		"HOME":         true, // many tools require this
 		"USER":         true,
 		"USERPROFILE":  true, // Windows equivalent of HOME
@@ -303,12 +304,20 @@ func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots, acceptFixtures boo
 	}
 
 	out := []string{}
+	pathKey := "PATH"
+	pathValue := ""
 	for _, kv := range os.Environ() {
 		eq := strings.IndexByte(kv, '=')
 		if eq < 0 {
 			continue
 		}
 		k := kv[:eq]
+		v := kv[eq+1:]
+		if strings.EqualFold(k, "PATH") {
+			pathKey = k
+			pathValue = v
+			continue
+		}
 		if allowed[k] {
 			out = append(out, kv)
 		}
@@ -316,6 +325,7 @@ func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots, acceptFixtures boo
 
 	// Marker so the subprocess can self-identify in error reports and
 	// so adapters can tighten behavior (e.g. force CI=1 for playwright).
+	out = append(out, pathKey+"="+isolatedEvaluatorPath(repoRoot, pathValue))
 	out = append(out, "PWD="+repoRoot)
 	out = append(out, "HARNESS_ISOLATED=1")
 	out = append(out, "CI=1")
@@ -326,6 +336,36 @@ func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots, acceptFixtures boo
 		out = append(out, "HARNESS_ACCEPT_FIXTURES=1")
 	}
 	return out
+}
+
+func isolatedEvaluatorPath(repoRoot, current string) string {
+	entries := []string{}
+	seen := map[string]bool{}
+	add := func(entry string) {
+		entry = strings.TrimSpace(strings.Trim(entry, `"`))
+		if entry == "" || entry == "." {
+			return
+		}
+		if !filepath.IsAbs(entry) {
+			entry = filepath.Join(repoRoot, entry)
+			if _, err := os.Stat(entry); err != nil {
+				return
+			}
+		}
+		entry = filepath.Clean(entry)
+		key := strings.ToLower(entry)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		entries = append(entries, entry)
+	}
+
+	add(filepath.Join(repoRoot, "node_modules", ".bin"))
+	for _, entry := range filepath.SplitList(current) {
+		add(entry)
+	}
+	return strings.Join(entries, string(os.PathListSeparator))
 }
 
 // Consolidate finalizes the sprint: writes the score, appends to

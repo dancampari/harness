@@ -41,7 +41,7 @@ func (j JestCoverage) Run(ctx context.Context, root string) sensors.Result {
 		SensorName: j.Name(),
 		Dimension:  j.Dimension(),
 	}
-	cmd := exec.CommandContext(ctx, "npx", "--no-install", "jest",
+	cmd := nodeToolCommand(ctx, root, "jest",
 		"--coverage",
 		"--coverageReporters=json-summary",
 		"--coverageReporters=lcov",

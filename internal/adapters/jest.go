@@ -59,11 +59,10 @@ func (j Jest) Run(ctx context.Context, root string) sensors.Result {
 		Dimension:  j.Dimension(),
 	}
 
-	// We run with --json so we can parse, --coverage so we can extract
-	// percentages, and --passWithNoTests to avoid spurious failures on
+	// We run with --json so we can parse and --passWithNoTests to avoid spurious failures on
 	// projects that haven't authored tests yet (the harness will catch
 	// that via the Coverage dimension instead).
-	cmd := exec.CommandContext(ctx, "npx", "--no-install", "jest",
+	cmd := nodeToolCommand(ctx, root, "jest",
 		"--json",
 		"--passWithNoTests")
 	cmd.Dir = root
