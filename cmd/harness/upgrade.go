@@ -3,6 +3,7 @@ package harness
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/dancampari/harness/internal/config"
@@ -18,6 +19,8 @@ type upgradeOptions struct {
 	Yes      bool
 	StartTUI bool
 }
+
+var lookPath = exec.LookPath
 
 func newUpgradeCmd(version string) *cobra.Command {
 	var opts upgradeOptions
@@ -196,13 +199,35 @@ func resolveUpgradeScope(value string, state setupState) (string, error) {
 	case "project", "global":
 		return scope, nil
 	case "auto":
-		if state.InstallScope == "global" || state.InstallScope == "project" {
-			return state.InstallScope, nil
+		if state.InstallScope == "global" {
+			return "global", nil
+		}
+		if globalHarnessOnPath() {
+			return "global", nil
+		}
+		if state.InstallScope == "project" {
+			return "project", nil
 		}
 		return "project", nil
 	default:
 		return "", fmt.Errorf("unknown install scope %q; use auto|project|global", value)
 	}
+}
+
+func globalHarnessOnPath() bool {
+	path, err := lookPath("harness")
+	if err != nil {
+		return false
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return true
+	}
+	projectHarness, projectErr := filepath.Abs(filepath.Join(".harness", "bin", executableName("harness")))
+	if projectErr == nil && samePath(abs, projectHarness) {
+		return false
+	}
+	return true
 }
 
 func ensurePersistentHarnessFiles(root string, project detect.ProjectInfo, planningMode string) error {

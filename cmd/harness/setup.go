@@ -334,14 +334,18 @@ func installGlobalCommand() error {
 			lastErr = err
 			continue
 		}
-		dest := filepath.Join(dir, executableName("harness"))
-		if samePath(exe, dest) {
-			fmt.Println("  OK global harness command already points to this executable:", dest)
-			return nil
+		dest := filepath.Join(dir, globalHarnessBinaryName())
+		if !samePath(exe, dest) {
+			if err := copyFile(exe, dest, 0o755); err != nil {
+				lastErr = err
+				continue
+			}
 		}
-		if err := copyFile(exe, dest, 0o755); err != nil {
-			lastErr = err
-			continue
+		if runtime.GOOS == "windows" {
+			if err := writeWindowsGlobalHarnessShims(dir); err != nil {
+				lastErr = err
+				continue
+			}
 		}
 		fmt.Println("  OK global harness command installed:", dest)
 		if !pathContains(dir) {
@@ -350,6 +354,46 @@ func installGlobalCommand() error {
 		return nil
 	}
 	return fmt.Errorf("install global harness command: %w", lastErr)
+}
+
+func globalHarnessBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "harness.exe"
+	}
+	return "harness"
+}
+
+func writeWindowsGlobalHarnessShims(dir string) error {
+	cmd := `@ECHO off
+SETLOCAL
+SET "_harness=%~dp0harness.exe"
+"%_harness%" %*
+EXIT /b %ERRORLEVEL%
+`
+	ps1 := `$basedir = Split-Path $MyInvocation.MyCommand.Definition -Parent
+$harness = Join-Path $basedir "harness.exe"
+if ($MyInvocation.ExpectingInput) {
+  $input | & $harness @args
+} else {
+  & $harness @args
+}
+exit $LASTEXITCODE
+`
+	sh := `#!/bin/sh
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$DIR/harness.exe" "$@"
+`
+	files := map[string]string{
+		filepath.Join(dir, "harness.cmd"): cmd,
+		filepath.Join(dir, "harness.ps1"): ps1,
+		filepath.Join(dir, "harness"):     sh,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func installProjectCommand() error {

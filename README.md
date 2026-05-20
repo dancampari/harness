@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.5.4
+npx github:dancampari/harness#v0.5.5
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -56,12 +56,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.5.4 --yes
-npx github:dancampari/harness#v0.5.4 --cli codex --yes
-npx github:dancampari/harness#v0.5.4 --cli claude --yes
-npx github:dancampari/harness#v0.5.4 --cli cursor --yes
-npx github:dancampari/harness#v0.5.4 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.5.4 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.5.5 --yes
+npx github:dancampari/harness#v0.5.5 --cli codex --yes
+npx github:dancampari/harness#v0.5.5 --cli claude --yes
+npx github:dancampari/harness#v0.5.5 --cli cursor --yes
+npx github:dancampari/harness#v0.5.5 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.5.5 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -72,7 +72,7 @@ npx github:dancampari/harness#v0.5.4 --cli codex --planning manual --scope globa
 Use one command to refresh Harness in a project that already has `.harness/`:
 
 ```bash
-npx github:dancampari/harness#v0.5.4 upgrade --yes
+npx github:dancampari/harness#v0.5.5 upgrade --yes
 ```
 
 The upgrade command preserves project memory and history:
@@ -99,6 +99,11 @@ AGENTS.md / CLAUDE.md / .cursor/rules/harness.mdc
 .harness/.gitignore
 safe .harness/config.yaml defaults via doctor --fix
 ```
+
+When `upgrade --yes` detects an existing `harness` command on PATH, it also
+refreshes that global command. On Windows this overwrites the old npm shims
+`harness.cmd`, `harness.ps1`, and `harness` so plain `harness --version` uses
+the newly installed binary instead of an older global package wrapper.
 
 For the latest GitHub commit instead of a pinned release, use the default
 branch:
@@ -131,8 +136,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.5.4 --yes
-npx github:dancampari/harness#v0.5.4 sprint new "implement user auth"
+npx github:dancampari/harness#v0.5.5 --yes
+npx github:dancampari/harness#v0.5.5 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -146,21 +151,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.5.4 contract propose
-npx github:dancampari/harness#v0.5.4 contract approve --role planner
-npx github:dancampari/harness#v0.5.4 contract approve --role tester
+npx github:dancampari/harness#v0.5.5 contract propose
+npx github:dancampari/harness#v0.5.5 contract approve --role planner
+npx github:dancampari/harness#v0.5.5 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.5.4 sprint qa
-npx github:dancampari/harness#v0.5.4 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.5.4 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.5.4 sprint repair
-npx github:dancampari/harness#v0.5.4 sprint score
-npx github:dancampari/harness#v0.5.4 run --resume
+npx github:dancampari/harness#v0.5.5 sprint qa
+npx github:dancampari/harness#v0.5.5 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.5.5 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.5.5 sprint repair
+npx github:dancampari/harness#v0.5.5 sprint score
+npx github:dancampari/harness#v0.5.5 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -459,7 +464,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Report 1-12/40` or `Events 3-10/80`.
 
 ```text
-harness   Autonomous Development Pipeline   v0.5.4      Project: harness-demo   Agent: codex   Status: PASS
+harness   Autonomous Development Pipeline   v0.5.5      Project: harness-demo   Agent: codex   Status: PASS
 
 [1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 

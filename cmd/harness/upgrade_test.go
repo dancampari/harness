@@ -95,3 +95,21 @@ func TestUpgradeRefreshesGeneratedFilesAndPreservesMemory(t *testing.T) {
 		t.Fatalf("memory.db missing after upgrade: %v", err)
 	}
 }
+
+func TestUpgradeAutoScopeUpdatesExistingGlobalHarness(t *testing.T) {
+	original := lookPath
+	lookPath = func(file string) (string, error) {
+		return filepath.Join(t.TempDir(), "harness.cmd"), nil
+	}
+	defer func() {
+		lookPath = original
+	}()
+
+	scope, err := resolveUpgradeScope("auto", setupState{InstallScope: "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope != "global" {
+		t.Fatalf("expected existing PATH harness to force global upgrade, got %q", scope)
+	}
+}
