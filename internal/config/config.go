@@ -14,6 +14,7 @@ const (
 	DimComplexity   = "complexity"
 	DimSecurity     = "security"
 	DimArchitecture = "architecture"
+	DimBehavior     = "behavior"
 	DimContract     = "contract"
 	DimE2E          = "e2e"
 )
@@ -41,6 +42,7 @@ type AdaptersConfig struct {
 	Security     []string `yaml:"security"`
 	Complexity   []string `yaml:"complexity"`
 	Architecture []string `yaml:"architecture"`
+	Behavior     []string `yaml:"behavior"`
 	E2E          []string `yaml:"e2e"`
 }
 
@@ -52,6 +54,7 @@ type ThresholdsConfig struct {
 	Complexity   int `yaml:"complexity"`
 	Security     int `yaml:"security"`
 	Architecture int `yaml:"architecture"`
+	Behavior     int `yaml:"behavior"`
 	Contract     int `yaml:"contract"`
 	E2E          int `yaml:"e2e"`
 }
@@ -64,6 +67,7 @@ type DimensionWeights struct {
 	Complexity   int `yaml:"complexity"`
 	Security     int `yaml:"security"`
 	Architecture int `yaml:"architecture"`
+	Behavior     int `yaml:"behavior"`
 	Contract     int `yaml:"contract"`
 	E2E          int `yaml:"e2e"`
 }
@@ -95,6 +99,7 @@ func (c Config) ActiveDimensions() []string {
 		DimComplexity,
 		DimSecurity,
 		DimArchitecture,
+		DimBehavior,
 		DimContract,
 		DimE2E,
 	}
@@ -116,6 +121,7 @@ func (c Config) Validate() []string {
 		DimComplexity,
 		DimSecurity,
 		DimArchitecture,
+		DimBehavior,
 		DimContract,
 		DimE2E,
 	} {
@@ -147,6 +153,8 @@ func (c Config) ThresholdFor(dim string) int {
 		return c.Thresholds.Security
 	case DimArchitecture:
 		return c.Thresholds.Architecture
+	case DimBehavior:
+		return c.Thresholds.Behavior
 	case DimContract:
 		return c.Thresholds.Contract
 	case DimE2E:
@@ -167,6 +175,8 @@ func (c Config) WeightFor(dim string) int {
 		return c.Weights.Security
 	case DimArchitecture:
 		return c.Weights.Architecture
+	case DimBehavior:
+		return c.Weights.Behavior
 	case DimContract:
 		return c.Weights.Contract
 	case DimE2E:
@@ -187,6 +197,8 @@ func (c Config) AdapterNamesForDimension(dim string) []string {
 		return copyStrings(c.Adapters.Security)
 	case DimArchitecture:
 		return copyStrings(c.Adapters.Architecture)
+	case DimBehavior:
+		return copyStrings(c.Adapters.Behavior)
 	case DimE2E:
 		return copyStrings(c.Adapters.E2E)
 	}
@@ -202,6 +214,7 @@ func (c Config) AllAdapterNames() []string {
 		DimComplexity,
 		DimSecurity,
 		DimArchitecture,
+		DimBehavior,
 		DimE2E,
 	} {
 		for _, name := range c.AdapterNamesForDimension(dim) {
@@ -232,6 +245,9 @@ func DefaultFor(stack string) Config {
 		},
 		Weights: DimensionWeights{
 			Contract: 100,
+		},
+		Adapters: AdaptersConfig{
+			Behavior: []string{"approved-fixtures"},
 		},
 		E2E: E2EConfig{
 			Required:      true,
@@ -272,6 +288,7 @@ func DefaultFor(stack string) Config {
 			Security:     []string{"npm-audit"},
 			Complexity:   []string{"js-complexity"},
 			Architecture: []string{"js-architecture"},
+			Behavior:     []string{"approved-fixtures"},
 			E2E:          []string{"playwright"},
 		}
 	case "python":
@@ -280,6 +297,7 @@ func DefaultFor(stack string) Config {
 			Test:     []string{},
 			Coverage: []string{},
 			Security: []string{},
+			Behavior: []string{"approved-fixtures"},
 			E2E:      []string{},
 		}
 	case "go":
@@ -288,6 +306,7 @@ func DefaultFor(stack string) Config {
 			Test:     []string{},
 			Coverage: []string{},
 			Security: []string{},
+			Behavior: []string{"approved-fixtures"},
 			E2E:      []string{},
 		}
 	case "rust":
@@ -296,6 +315,7 @@ func DefaultFor(stack string) Config {
 			Test:     []string{},
 			Coverage: []string{},
 			Security: []string{},
+			Behavior: []string{"approved-fixtures"},
 		}
 	default:
 		// Unknown stack — leave adapters empty; user fills in.

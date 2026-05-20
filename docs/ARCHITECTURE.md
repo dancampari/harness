@@ -70,6 +70,15 @@ New baselines require `harness sprint qa --accept-screenshots` after review.
 
 Code: `internal/adapters/playwright.go`.
 
+Approved behavior fixtures cover deterministic input/output scenarios that do
+not need a browser. JSON fixtures under `.harness/fixtures/` run a configured
+command, compare exit code/stdout/stderr against approved expectations, and
+fail with `fixture-baseline-missing` or `fixture-regression` when the behavior
+has not been approved. Updating the approved output requires
+`harness sprint qa --accept-fixtures` after human review.
+
+Code: `internal/adapters/approved_fixtures.go`.
+
 ### Same-Process Judgement
 
 The parent CLI process re-executes itself with hidden `--internal`; that child
@@ -100,6 +109,7 @@ The production Node/TypeScript profile includes:
 - `npm-audit` for security
 - `js-complexity` for cyclomatic complexity, function size, and nesting
 - `js-architecture` for forbidden imports and import cycles
+- `approved-fixtures` for optional approved behavior fixtures
 - `playwright` for E2E and screenshot baseline checks
 
 Run `harness doctor` to inspect active dimensions, registered sensors, and

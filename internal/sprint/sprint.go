@@ -149,7 +149,7 @@ func (m *Manager) Status() (Status, error) {
 // in the same shell session, OS process boundaries enforce the
 // separation. There is no way for the subprocess to be influenced by
 // the parent's prior state.
-func (m *Manager) RunQA(acceptScreenshots bool) (*QAResult, error) {
+func (m *Manager) RunQA(acceptScreenshots, acceptFixtures bool) (*QAResult, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("locate harness binary: %w", err)
@@ -166,7 +166,7 @@ func (m *Manager) RunQA(acceptScreenshots bool) (*QAResult, error) {
 	cmd.Stdin = nil        // sever any inherited stdin (no terminal access)
 	cmd.Stderr = os.Stderr // forward subprocess diagnostics
 	cmd.Dir = repoRoot     // explicit working dir, not inherited
-	cmd.Env = isolatedEvaluatorEnv(repoRoot, acceptScreenshots)
+	cmd.Env = isolatedEvaluatorEnv(repoRoot, acceptScreenshots, acceptFixtures)
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -205,9 +205,12 @@ func (m *Manager) RunQA(acceptScreenshots bool) (*QAResult, error) {
 // (under .harness/evaluations/ and .harness/reports/) so those
 // artifacts exist even if the parent crashes between subprocess exit
 // and result rendering.
-func (m *Manager) RunQAInternal(stdout io.Writer, acceptScreenshots bool) error {
+func (m *Manager) RunQAInternal(stdout io.Writer, acceptScreenshots, acceptFixtures bool) error {
 	if acceptScreenshots {
 		_ = os.Setenv("HARNESS_ACCEPT_SCREENSHOTS", "1")
+	}
+	if acceptFixtures {
+		_ = os.Setenv("HARNESS_ACCEPT_FIXTURES", "1")
 	}
 	n, err := m.currentSprintNumber()
 	if err != nil {
@@ -261,7 +264,7 @@ func (m *Manager) RunQAInternal(stdout io.Writer, acceptScreenshots bool) error 
 // The allowlist approach is critical: a denylist would forever risk
 // missing some new env var that leaks state. Allowlist means new vars
 // stay out by default.
-func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots bool) []string {
+func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots, acceptFixtures bool) []string {
 	allowed := map[string]bool{
 		"PATH":         true, // find binaries
 		"HOME":         true, // many tools require this
@@ -318,6 +321,9 @@ func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots bool) []string {
 	out = append(out, "CI=1")
 	if acceptScreenshots {
 		out = append(out, "HARNESS_ACCEPT_SCREENSHOTS=1")
+	}
+	if acceptFixtures {
+		out = append(out, "HARNESS_ACCEPT_FIXTURES=1")
 	}
 	return out
 }
@@ -517,7 +523,7 @@ func (m *Manager) writeEvaluationMarkdown(n int, c *planner.Contract,
 	fmt.Fprintf(&sb, "| Dimension     | Score | Threshold | Passed | Findings |\n")
 	fmt.Fprintf(&sb, "|---------------|-------|-----------|--------|----------|\n")
 	dimOrder := []string{"correctness", "coverage", "complexity", "security",
-		"architecture", "contract", "e2e"}
+		"architecture", "behavior", "contract", "e2e"}
 	for _, name := range dimOrder {
 		d, ok := r.Dimensions[name]
 		if !ok {
@@ -683,11 +689,19 @@ func (m *Manager) renderRepairBrief(n int, r *evaluator.EvaluationResult) string
 	}
 	fmt.Fprintln(&sb)
 
-	if visualApprovalRequired(flat) {
+	if humanApprovalRequired(flat) {
 		fmt.Fprintf(&sb, "## User Approval Required\n")
-		fmt.Fprintf(&sb, "- A screenshot baseline is missing or visual output changed. The agent must not accept it silently.\n")
-		fmt.Fprintf(&sb, "- Ask the user to review `.harness/screenshots/current/` and, for regressions, `.harness/screenshots/diff/`.\n")
-		fmt.Fprintf(&sb, "- Only after explicit approval, run `harness sprint qa --accept-screenshots`.\n\n")
+		if visualApprovalRequired(flat) {
+			fmt.Fprintf(&sb, "- A screenshot baseline is missing or visual output changed. The agent must not accept it silently.\n")
+			fmt.Fprintf(&sb, "- Ask the user to review `.harness/screenshots/current/` and, for regressions, `.harness/screenshots/diff/`.\n")
+			fmt.Fprintf(&sb, "- Only after explicit approval, run `harness sprint qa --accept-screenshots`.\n")
+		}
+		if fixtureApprovalRequired(flat) {
+			fmt.Fprintf(&sb, "- An approved behavior fixture is missing or changed. The agent must not accept it silently.\n")
+			fmt.Fprintf(&sb, "- Ask the user to review `.harness/fixtures/` and the behavior change.\n")
+			fmt.Fprintf(&sb, "- Only after explicit approval, run `harness sprint qa --accept-fixtures`.\n")
+		}
+		fmt.Fprintln(&sb)
 	}
 
 	fmt.Fprintf(&sb, "## Agent Notes\n")
@@ -763,6 +777,12 @@ func repairAction(f repairFinding) string {
 		return fmt.Sprintf("Review %s with the user. If correct, rerun QA with --accept-screenshots.", f.location)
 	case "visual-regression":
 		return fmt.Sprintf("Inspect %s and .harness/screenshots/diff; fix UI regression or ask user to approve the new baseline.", f.location)
+	case "fixture-baseline-missing":
+		return fmt.Sprintf("Review %s with the user. If correct, rerun QA with --accept-fixtures.", f.location)
+	case "fixture-regression":
+		return "Fix the behavior regression or ask the user to approve the changed fixture with --accept-fixtures."
+	case "no-approved-fixtures":
+		return "Add approved JSON fixtures under .harness/fixtures or disable behavior by setting threshold and weight to 0."
 	case "missing-sensor":
 		return "Run harness doctor, install/configure the missing sensor, then rerun QA."
 	case "missing-deliverable", "unmet-criterion":
@@ -783,9 +803,22 @@ func repairAction(f repairFinding) string {
 	}
 }
 
+func humanApprovalRequired(findings []repairFinding) bool {
+	return visualApprovalRequired(findings) || fixtureApprovalRequired(findings)
+}
+
 func visualApprovalRequired(findings []repairFinding) bool {
 	for _, f := range findings {
 		if f.rule == "screenshot-baseline-missing" || f.rule == "visual-regression" {
+			return true
+		}
+	}
+	return false
+}
+
+func fixtureApprovalRequired(findings []repairFinding) bool {
+	for _, f := range findings {
+		if f.rule == "fixture-baseline-missing" || f.rule == "fixture-regression" {
 			return true
 		}
 	}

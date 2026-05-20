@@ -68,6 +68,7 @@ func runInit(opts initOptions) error {
 		filepath.Join(root, "contracts"),
 		filepath.Join(root, "approvals"),
 		filepath.Join(root, "evaluations"),
+		filepath.Join(root, "fixtures"),
 		filepath.Join(root, "repairs"),
 		filepath.Join(root, "screenshots"),
 		filepath.Join(root, "reports"),
@@ -265,6 +266,7 @@ Autonomy rules:
 11. Only ask the user for decisions Harness cannot make deterministically:
    product intent, changing acceptance criteria, installing missing project
    tools when that changes the app stack, or accepting visual baselines with
-   ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
+   ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `, or approved behavior fixtures with
+   ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + `.
 `
 }

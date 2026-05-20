@@ -173,6 +173,7 @@ Use this skill before implementing a user request.
 - Deliverables name concrete files, routes, commands, schemas, or exported symbols.
 - Acceptance criteria are observable and testable by sensors or direct inspection.
 - Constraints include architecture boundaries, forbidden imports, complexity limits, security rules, or visual requirements when relevant.
+- Behavior-sensitive work includes approved fixtures under .harness/fixtures when exact inputs/outputs matter.
 - Ambiguities are recorded as assumptions only when they do not change product intent.
 
 ## References
@@ -208,6 +209,7 @@ Use this skill before implementation, from a tester/reviewer role.
 - Deliverables name concrete files, routes, commands, schemas, or symbols.
 - Acceptance criteria are observable and include negative cases where relevant.
 - Constraints cover architecture, security, visual, complexity, and coverage risks that matter for the sprint.
+- Behavior changes that can be represented as stable inputs and outputs should add or update approved fixtures.
 - The contract does not lower thresholds or remove risk to make QA easier.
 - No implementation starts until the contract status is AGREED.
 - If the contract is weak, reject it and require the author/planner to repair

@@ -69,6 +69,7 @@ type ProcessInfo struct {
 	Isolated             bool `json:"isolated"`
 	ContextEnvStripped   bool `json:"context_env_stripped"`
 	AcceptingScreenshots bool `json:"accepting_screenshots"`
+	AcceptingFixtures    bool `json:"accepting_fixtures"`
 }
 
 // ContractCheckResult records whether the sprint's contract was satisfied.
@@ -170,6 +171,7 @@ func processInfo() ProcessInfo {
 		Isolated:             os.Getenv("HARNESS_ISOLATED") == "1",
 		ContextEnvStripped:   os.Getenv("CLAUDE_SESSION_TOKEN") == "" && os.Getenv("CODEX_SESSION_TOKEN") == "" && os.Getenv("CURSOR_TRACE_ID") == "",
 		AcceptingScreenshots: os.Getenv("HARNESS_ACCEPT_SCREENSHOTS") == "1",
+		AcceptingFixtures:    os.Getenv("HARNESS_ACCEPT_FIXTURES") == "1",
 	}
 }
 
@@ -188,6 +190,7 @@ func (e *Evaluator) configuredSensors(root string) configuredSensors {
 		config.DimComplexity,
 		config.DimSecurity,
 		config.DimArchitecture,
+		config.DimBehavior,
 		config.DimE2E,
 	} {
 		for _, name := range e.cfg.AdapterNamesForDimension(dim) {
@@ -197,7 +200,7 @@ func (e *Evaluator) configuredSensors(root string) configuredSensors {
 		}
 	}
 
-	for _, name := range e.cfg.AllAdapterNames() {
+	for _, name := range e.activeAdapterNames() {
 		st := SensorStatus{Name: name, Dimension: nameToDim[name]}
 		if s, ok := e.registry.ByName(name); ok {
 			st.Registered = true
@@ -211,6 +214,24 @@ func (e *Evaluator) configuredSensors(root string) configuredSensors {
 		}
 		out.statusIndex[name] = len(out.statuses)
 		out.statuses = append(out.statuses, st)
+	}
+	return out
+}
+
+func (e *Evaluator) activeAdapterNames() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, dim := range e.cfg.ActiveDimensions() {
+		if dim == config.DimContract {
+			continue
+		}
+		for _, name := range e.cfg.AdapterNamesForDimension(dim) {
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			out = append(out, name)
+		}
 	}
 	return out
 }
@@ -274,6 +295,8 @@ func thresholdOf(thresholds config.ThresholdsConfig, d sensors.Dimension) int {
 		return thresholds.Security
 	case sensors.DimArchitecture:
 		return thresholds.Architecture
+	case sensors.DimBehavior:
+		return thresholds.Behavior
 	case sensors.DimContract:
 		return thresholds.Contract
 	case sensors.DimE2E:
@@ -345,6 +368,7 @@ func weightedTotal(dims map[string]DimensionScore, w config.DimensionWeights) in
 		config.DimComplexity:   w.Complexity,
 		config.DimSecurity:     w.Security,
 		config.DimArchitecture: w.Architecture,
+		config.DimBehavior:     w.Behavior,
 		config.DimContract:     w.Contract,
 		config.DimE2E:          w.E2E,
 	}

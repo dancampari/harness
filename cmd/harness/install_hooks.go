@@ -553,7 +553,8 @@ Autonomous protocol:
 
 Only ask the user for product decisions, acceptance-criteria changes, dependency
 installation approval when it changes the project stack, or visual baseline
-approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
+approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `, or approved-fixture
+baseline approval via ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + `.
 
 Never run ` + "`" + invoke + ` sprint qa --allow-unagreed` + "`" + ` unless the user explicitly asks for an emergency override.
 Never declare a task done without a passing, non-stale QA verdict from Harness.
@@ -601,7 +602,8 @@ Autonomous protocol for Claude Code:
 
 Only ask the user for product decisions, acceptance criteria changes,
 dependency installation approval when it changes the project stack, or visual
-baseline approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
+baseline approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `, or approved-fixture
+baseline approval via ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + `.
 `
 }
 

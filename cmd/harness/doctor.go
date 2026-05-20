@@ -135,6 +135,8 @@ func installHint(sensor string) string {
 		return "install @playwright/test and add playwright.config.*"
 	case "js-complexity", "js-architecture":
 		return "built-in static sensor should be available for Node/TS projects"
+	case "approved-fixtures":
+		return "add approved JSON fixtures under .harness/fixtures"
 	default:
 		return "install or disable this sensor in .harness/config.yaml"
 	}

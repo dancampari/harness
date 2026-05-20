@@ -900,7 +900,7 @@ func verdictColumns(width int, dimension, score, threshold, status, findings, se
 }
 
 func orderedDimensionNames(dims map[string]evaluator.DimensionScore) []string {
-	preferred := []string{"correctness", "coverage", "complexity", "security", "architecture", "contract", "e2e"}
+	preferred := []string{"correctness", "coverage", "complexity", "security", "architecture", "behavior", "contract", "e2e"}
 	seen := map[string]bool{}
 	var names []string
 	for _, name := range preferred {

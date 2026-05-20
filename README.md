@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.4
+npx github:dancampari/harness#v0.4.5
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.4 --yes
-npx github:dancampari/harness#v0.4.4 --cli codex --yes
-npx github:dancampari/harness#v0.4.4 --cli claude --yes
-npx github:dancampari/harness#v0.4.4 --cli cursor --yes
-npx github:dancampari/harness#v0.4.4 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.4.4 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.4.5 --yes
+npx github:dancampari/harness#v0.4.5 --cli codex --yes
+npx github:dancampari/harness#v0.4.5 --cli claude --yes
+npx github:dancampari/harness#v0.4.5 --cli cursor --yes
+npx github:dancampari/harness#v0.4.5 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.4.5 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.4 --yes
-npx github:dancampari/harness#v0.4.4 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.5 --yes
+npx github:dancampari/harness#v0.4.5 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,24 +95,26 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.4 contract propose
-npx github:dancampari/harness#v0.4.4 contract approve --role planner
-npx github:dancampari/harness#v0.4.4 contract approve --role tester
+npx github:dancampari/harness#v0.4.5 contract propose
+npx github:dancampari/harness#v0.4.5 contract approve --role planner
+npx github:dancampari/harness#v0.4.5 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.4 sprint qa
-npx github:dancampari/harness#v0.4.4 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.4 sprint repair
-npx github:dancampari/harness#v0.4.4 sprint score
-npx github:dancampari/harness#v0.4.4 run --resume
+npx github:dancampari/harness#v0.4.5 sprint qa
+npx github:dancampari/harness#v0.4.5 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.5 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.4.5 sprint repair
+npx github:dancampari/harness#v0.4.5 sprint score
+npx github:dancampari/harness#v0.4.5 run --resume
 ```
 
-Use `--accept-screenshots` only after reviewing the first visual baseline. A
-missing baseline is a failure by design.
+Use `--accept-screenshots` only after reviewing the first visual baseline. Use
+`--accept-fixtures` only after reviewing behavior fixture changes. Missing
+baselines are failures by design.
 
 If QA fails, Harness writes an actionable repair brief:
 
@@ -352,7 +354,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Activity 1-6/12` and `Sprints 3-8/15`.
 
 ```text
-harness  Autonomous Development Pipeline   v0.4.4
+harness  Autonomous Development Pipeline   v0.4.5
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    98      2.5s    0
@@ -391,6 +393,7 @@ If an active dimension has no available sensor that executes, Harness emits a
 | complexity | Cyclomatic complexity, size, nesting | `js-complexity` |
 | security | Dependency vulnerabilities | `npm-audit` |
 | architecture | Import graph, cycles, forbidden imports | `js-architecture` |
+| behavior | Approved command fixtures | `approved-fixtures` |
 | contract | Declared deliverables and exports | built-in contract validator |
 | e2e | Browser behavior and screenshot baselines | `playwright` |
 
@@ -400,6 +403,38 @@ JSON reports include:
 - per-dimension scores and findings;
 - configured sensor status: registered, available, executed, error, duration;
 - isolated evaluator process metadata.
+
+## Approved Fixtures
+
+The optional `behavior` dimension validates stable input/output scenarios from
+`.harness/fixtures/*.json`. It is disabled by default. Enable it by setting both
+`thresholds.behavior` and `weights.behavior` above zero and keeping
+`adapters.behavior: ["approved-fixtures"]`.
+
+Example fixture:
+
+```json
+{
+  "schema_version": "1",
+  "name": "invoice summary",
+  "command": "node",
+  "args": ["scripts/fixture-invoice-summary.mjs"],
+  "timeout_seconds": 10,
+  "expect": {
+    "exit_code": 0,
+    "stdout": "Total: $42.00\n",
+    "stderr": ""
+  }
+}
+```
+
+If a fixture has no approved expectation, or output changes, QA fails with
+`fixture-baseline-missing` or `fixture-regression`. The agent must ask the user
+to review the behavior change. Only after explicit approval should it run:
+
+```bash
+harness sprint qa --accept-fixtures
+```
 
 ## Process Isolation
 
@@ -438,6 +473,8 @@ Harness creates this local directory:
       planner.json
       tester.json
   evaluations/
+  fixtures/
+    invoice-summary.json
   reports/
   repairs/
     latest.md
@@ -469,7 +506,7 @@ harness contract status [--sprint N]
 harness contract propose [--sprint N]
 harness contract approve --role planner|tester [--sprint N]
 harness contract reject --role planner|tester --reason <text> [--sprint N]
-harness sprint qa [--format=tty|json] [--accept-screenshots] [--allow-unagreed]
+harness sprint qa [--format=tty|json] [--accept-screenshots] [--accept-fixtures] [--allow-unagreed]
 harness sprint repair
 harness sprint score [--allow-fail]
 harness sprint list

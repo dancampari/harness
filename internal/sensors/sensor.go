@@ -36,6 +36,7 @@ const (
 	DimComplexity   Dimension = "complexity"
 	DimSecurity     Dimension = "security"
 	DimArchitecture Dimension = "architecture"
+	DimBehavior     Dimension = "behavior"
 	DimContract     Dimension = "contract"
 	DimE2E          Dimension = "e2e"
 )

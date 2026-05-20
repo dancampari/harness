@@ -19,6 +19,7 @@ func BuildRegistry() *sensors.Registry {
 	r.Register(NpmAudit{})
 	r.Register(JSComplexity{})
 	r.Register(JSArchitecture{})
+	r.Register(ApprovedFixtures{})
 	r.Register(Playwright{})
 	// Future: Ruff{}, Mypy{}, Pytest{}, GoVet{}, Staticcheck{}, Clippy{},
 	// Semgrep{}, NpmAudit{}, PipAudit{}, etc.

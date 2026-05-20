@@ -57,6 +57,14 @@
 - [x] TUI command prompt, internal scrolling, and resize-safe rendering
 - [ ] Optional provider-specific launch commands for opening Claude Agent View / Codex agent UI
 
+## v0.4.5 - Approved Behaviour Fixtures
+
+- [x] Optional `behavior` dimension
+- [x] `approved-fixtures` sensor for `.harness/fixtures/*.json`
+- [x] `harness sprint qa --accept-fixtures`
+- [x] Repair brief actions for missing or changed approved fixtures
+- [x] Human approval boundary for fixture baseline updates
+
 ## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit

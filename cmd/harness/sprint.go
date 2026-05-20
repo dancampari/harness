@@ -76,6 +76,7 @@ func newSprintQACmd() *cobra.Command {
 	var format string
 	var internal bool
 	var acceptScreenshots bool
+	var acceptFixtures bool
 	var allowUnagreed bool
 	cmd := &cobra.Command{
 		Use:   "qa",
@@ -95,7 +96,7 @@ users never pass it; the parent process sets it when forking.`,
 				// We are the spawned subprocess. Do the work and emit
 				// the EvaluationResult as JSON on stdout. Nothing else
 				// may go to stdout (the parent depends on parseable JSON).
-				return mgr.RunQAInternal(os.Stdout, acceptScreenshots)
+				return mgr.RunQAInternal(os.Stdout, acceptScreenshots, acceptFixtures)
 			}
 			if !allowUnagreed {
 				if err := agreement.NewManager(".harness").EnsureAgreed(0); err != nil {
@@ -103,7 +104,7 @@ users never pass it; the parent process sets it when forking.`,
 				}
 			}
 			// We are the parent. Spawn the subprocess and render.
-			result, err := mgr.RunQA(acceptScreenshots)
+			result, err := mgr.RunQA(acceptScreenshots, acceptFixtures)
 			if err != nil {
 				return err
 			}
@@ -122,6 +123,8 @@ users never pass it; the parent process sets it when forking.`,
 	cmd.Flags().StringVar(&format, "format", autoFormat(), "output format: tty|json")
 	cmd.Flags().BoolVar(&acceptScreenshots, "accept-screenshots", false,
 		"accept current Playwright screenshots as the visual baseline")
+	cmd.Flags().BoolVar(&acceptFixtures, "accept-fixtures", false,
+		"accept current approved-fixture command outputs after human review")
 	cmd.Flags().BoolVar(&allowUnagreed, "allow-unagreed", false,
 		"explicitly run QA before multi-agent contract agreement")
 	cmd.Flags().BoolVar(&internal, "internal", false,
