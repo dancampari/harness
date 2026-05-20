@@ -21,7 +21,19 @@ func BuildRegistry() *sensors.Registry {
 	r.Register(JSArchitecture{})
 	r.Register(ApprovedFixtures{})
 	r.Register(Playwright{})
-	// Future: Ruff{}, Mypy{}, Pytest{}, GoVet{}, Staticcheck{}, Clippy{},
-	// Semgrep{}, NpmAudit{}, PipAudit{}, etc.
+	r.Register(Ruff{})
+	r.Register(Mypy{})
+	r.Register(Pytest{})
+	r.Register(PytestCoverage{})
+	r.Register(PipAudit{})
+	r.Register(GoVet{})
+	r.Register(GoTest{})
+	r.Register(GoTestCoverage{})
+	r.Register(Staticcheck{})
+	r.Register(Govulncheck{})
+	r.Register(CargoClippy{})
+	r.Register(CargoTest{})
+	r.Register(CargoAudit{})
+	r.Register(Semgrep{})
 	return r
 }

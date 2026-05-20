@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.11
+npx github:dancampari/harness#v0.5.0
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -56,12 +56,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.11 --yes
-npx github:dancampari/harness#v0.4.11 --cli codex --yes
-npx github:dancampari/harness#v0.4.11 --cli claude --yes
-npx github:dancampari/harness#v0.4.11 --cli cursor --yes
-npx github:dancampari/harness#v0.4.11 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.4.11 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.5.0 --yes
+npx github:dancampari/harness#v0.5.0 --cli codex --yes
+npx github:dancampari/harness#v0.5.0 --cli claude --yes
+npx github:dancampari/harness#v0.5.0 --cli cursor --yes
+npx github:dancampari/harness#v0.5.0 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.5.0 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -84,8 +84,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.11 --yes
-npx github:dancampari/harness#v0.4.11 sprint new "implement user auth"
+npx github:dancampari/harness#v0.5.0 --yes
+npx github:dancampari/harness#v0.5.0 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -99,21 +99,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.11 contract propose
-npx github:dancampari/harness#v0.4.11 contract approve --role planner
-npx github:dancampari/harness#v0.4.11 contract approve --role tester
+npx github:dancampari/harness#v0.5.0 contract propose
+npx github:dancampari/harness#v0.5.0 contract approve --role planner
+npx github:dancampari/harness#v0.5.0 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.11 sprint qa
-npx github:dancampari/harness#v0.4.11 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.11 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.4.11 sprint repair
-npx github:dancampari/harness#v0.4.11 sprint score
-npx github:dancampari/harness#v0.4.11 run --resume
+npx github:dancampari/harness#v0.5.0 sprint qa
+npx github:dancampari/harness#v0.5.0 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.5.0 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.5.0 sprint repair
+npx github:dancampari/harness#v0.5.0 sprint score
+npx github:dancampari/harness#v0.5.0 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -291,23 +291,23 @@ planner/tester approvals.
 `harness sprint qa` renders a compact terminal card:
 
 ```text
-┌─ harness sprint qa · sprint 001 ──────────────────────────────
-│
-│  Verdict: PASS    Total Score: 98/100
-│
-│  ┌─ Dimension      Score   Threshold   Passed   Findings  ──┐
-│  │  architecture    100      70         ✓          0       │
-│  │  complexity      100      75         ✓          0       │
-│  │  contract        100      80         ✓          0       │
-│  │  correctness     100      80         ✓          0       │
-│  │  coverage         87      70         ✓          0       │
-│  │  e2e             100      70         ✓          0       │
-│  │  security        100      85         ✓          0       │
-│  └────────────────────────────────────────────────────────┘
-│
-│  Evaluation: .harness/evaluations/sprint-001.md
-│  Report: .harness/reports/sprint-001.json
-└────────────────────────────────────────────────────────────────
+â”Œâ”€ harness sprint qa Â· sprint 001 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+â”‚
+â”‚  Verdict: PASS    Total Score: 98/100
+â”‚
+â”‚  â”Œâ”€ Dimension      Score   Threshold   Passed   Findings  â”€â”€â”
+â”‚  â”‚  architecture    100      70         âœ“          0       â”‚
+â”‚  â”‚  complexity      100      75         âœ“          0       â”‚
+â”‚  â”‚  contract        100      80         âœ“          0       â”‚
+â”‚  â”‚  correctness     100      80         âœ“          0       â”‚
+â”‚  â”‚  coverage         87      70         âœ“          0       â”‚
+â”‚  â”‚  e2e             100      70         âœ“          0       â”‚
+â”‚  â”‚  security        100      85         âœ“          0       â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+â”‚
+â”‚  Evaluation: .harness/evaluations/sprint-001.md
+â”‚  Report: .harness/reports/sprint-001.json
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ```
 
 In an interactive terminal, `harness sprint qa` and `harness sprint score`
@@ -354,6 +354,24 @@ gate and no adapters. The fix command restores detected stack defaults and
 adapter lists, and refreshes `.harness/.gitignore`. It does not install package
 dependencies, rewrite contracts, alter reports, or change project code.
 
+## Stack Coverage
+
+Harness defaults are strict for supported stacks. If a dimension is active,
+at least one real configured sensor must execute.
+
+| Stack | Correctness | Coverage | Security | Optional |
+|---|---|---|---|---|
+| Node/TypeScript | ESLint, Jest, Vitest | Jest/Vitest coverage | npm audit | JS complexity, import architecture, Playwright |
+| Python | ruff, mypy, pytest | pytest-cov | pip-audit | approved fixtures |
+| Go | go vet, staticcheck, go test | go test -cover | govulncheck | approved fixtures |
+| Rust | clippy, cargo test | - | cargo audit | approved fixtures |
+| Universal | - | - | semgrep when configured | requires local semgrep config |
+
+Missing tools are actionable failures for active dimensions. Agents should run
+`harness doctor --fix` autonomously when Doctor reports safe Harness config
+drift, then install or request approval only for missing project dependencies
+that actually change the application environment.
+
 ### Live TUI
 
 `harness ui` or `harness run --resume` opens a full-screen Bubble Tea
@@ -394,7 +412,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Report 1-12/40` or `Events 3-10/80`.
 
 ```text
-harness   Autonomous Development Pipeline   v0.4.11      Project: harness-demo   Agent: codex   Status: PASS
+harness   Autonomous Development Pipeline   v0.5.0      Project: harness-demo   Agent: codex   Status: PASS
 
 [1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 

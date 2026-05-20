@@ -125,10 +125,12 @@ Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 
 ## v0.5 - Broader Stack Coverage
 
-- [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit
-- [ ] Go: go vet, staticcheck, go test -cover, govulncheck
-- [ ] Rust: clippy, cargo test, cargo audit
-- [ ] Universal: optional semgrep adapter
+- [x] Python: ruff, mypy, pytest, pytest-cov, pip-audit
+- [x] Go: go vet, staticcheck, go test -cover, govulncheck
+- [x] Rust: clippy, cargo test, cargo audit
+- [x] Universal: optional semgrep adapter
+- [x] Stack defaults activate conservative quality gates for Python, Go, and Rust
+- [x] Doctor and agent protocols support autonomous `harness doctor --fix`
 
 ## v0.6 - Distribution Hardening
 

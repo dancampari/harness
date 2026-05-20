@@ -238,8 +238,9 @@ Use this skill before implementing a user request.
 14. Run: harness sprint qa --format=json after meaningful changes.
 15. Read .harness/reports/latest.json. If verdict is FAIL, run: harness sprint repair.
 16. Read .harness/repairs/latest.md, fix findings, and rerun QA.
-17. Repeat repair -> QA until verdict is PASS.
-18. Run: harness sprint score only after QA is PASS.
+17. If Doctor reports safe config drift or says to run doctor --fix, run: harness doctor --fix.
+18. Repeat repair -> QA until verdict is PASS.
+19. Run: harness sprint score only after QA is PASS.
 
 ## Required Contract Properties
 

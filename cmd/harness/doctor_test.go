@@ -14,7 +14,7 @@ func TestDoctorStrictFailsWhenActiveSensorsAreUnavailable(t *testing.T) {
 	writeDoctorFile(t, root, "package.json", `{"name":"demo","devDependencies":{}}`)
 	writeDoctorHarnessConfig(t, root, config.DefaultFor("typescript"))
 	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
-	writeDoctorFile(t, root, ".harness/.gitignore", "memory.db\nreports/\nrepairs/\nscreenshots/\n")
+	writeDoctorFile(t, root, ".harness/.gitignore", generatedHarnessIgnoreForTest)
 
 	err := runDoctorWithOptions(root, doctorOptions{Strict: true})
 	if err == nil || !strings.Contains(err.Error(), "doctor strict failed") {
@@ -26,7 +26,7 @@ func TestDoctorStrictAllowsContractOnlyHarnessWithWarnings(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
 	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
-	writeDoctorFile(t, root, ".harness/.gitignore", "memory.db\nreports/\nrepairs/\nscreenshots/\n")
+	writeDoctorFile(t, root, ".harness/.gitignore", generatedHarnessIgnoreForTest)
 
 	if err := runDoctorWithOptions(root, doctorOptions{Strict: true}); err != nil {
 		t.Fatalf("expected contract-only strict doctor to pass, got %v", err)
@@ -98,7 +98,7 @@ func TestDoctorStrictFailsOnStaleInstalledSkills(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
 	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
-	writeDoctorFile(t, root, ".harness/.gitignore", "memory.db\nreports/\nrepairs/\nscreenshots/\n")
+	writeDoctorFile(t, root, ".harness/.gitignore", generatedHarnessIgnoreForTest)
 	writeDoctorFile(t, root, ".harness/setup.json", `{"contract_skills_enabled":true}`)
 	writeDoctorFile(t, root, ".harness/skills/contract-authoring/SKILL.md", "old skill without repair loop\n")
 
@@ -112,7 +112,7 @@ func TestDoctorStrictPassesSpecDrivenPlanningArtifacts(t *testing.T) {
 	root := t.TempDir()
 	harnessDir := filepath.Join(root, ".harness")
 	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
-	writeDoctorFile(t, root, ".harness/.gitignore", "memory.db\nreports/\nrepairs/\nscreenshots/\n")
+	writeDoctorFile(t, root, ".harness/.gitignore", generatedHarnessIgnoreForTest)
 	writeDoctorFile(t, root, ".harness/setup.json", `{"planning_mode":"spec-driven","contract_skills_enabled":true,"coding_cli":"none"}`)
 	if err := runInstallSkillsWithOptions(harnessDir, false, PlanningSpecDriven); err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestDoctorStrictFailsOnStaleSpecDrivenSkill(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
 	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
-	writeDoctorFile(t, root, ".harness/.gitignore", "memory.db\nreports/\nrepairs/\nscreenshots/\n")
+	writeDoctorFile(t, root, ".harness/.gitignore", generatedHarnessIgnoreForTest)
 	writeDoctorFile(t, root, ".harness/setup.json", `{"planning_mode":"spec-driven","contract_skills_enabled":true,"coding_cli":"none"}`)
 	writeDoctorFile(t, root, ".harness/skills/spec-driven/SKILL.md", "old skill\n")
 
@@ -167,3 +167,5 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+const generatedHarnessIgnoreForTest = "memory.db\nreports/\nrepairs/\nscreenshots/\ntmp/\n"

@@ -218,7 +218,12 @@ func isContractOnlyConfig(cfg config.Config) bool {
 }
 
 func stackSupportsDefaultAdapters(stack string) bool {
-	return stack == "node" || stack == "typescript"
+	switch stack {
+	case "node", "typescript", "python", "go", "rust":
+		return true
+	default:
+		return false
+	}
 }
 
 func hasStackAdapterConfig(cfg config.Config) bool {
@@ -235,7 +240,7 @@ func setAdapterNamesForDimension(adapters *config.AdaptersConfig, dim string, na
 	switch dim {
 	case config.DimCorrectness:
 		for _, name := range names {
-			if name == "eslint" {
+			if isLintAdapter(name) {
 				adapters.Lint = append(adapters.Lint, name)
 			} else {
 				adapters.Test = append(adapters.Test, name)
@@ -253,6 +258,15 @@ func setAdapterNamesForDimension(adapters *config.AdaptersConfig, dim string, na
 		adapters.Behavior = names
 	case config.DimE2E:
 		adapters.E2E = names
+	}
+}
+
+func isLintAdapter(name string) bool {
+	switch name {
+	case "eslint", "ruff", "mypy", "go-vet", "staticcheck", "clippy":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -280,6 +294,26 @@ func installHint(sensor string) string {
 		return "built-in static sensor should be available for Node/TS projects"
 	case "approved-fixtures":
 		return "add approved JSON fixtures under .harness/fixtures"
+	case "ruff":
+		return "install ruff in the project environment"
+	case "mypy":
+		return "install mypy in the project environment"
+	case "pytest", "pytest-cov":
+		return "install pytest and pytest-cov in the project environment"
+	case "pip-audit":
+		return "install pip-audit in the project environment"
+	case "go-vet", "go-test", "go-test-coverage":
+		return "ensure go is on PATH"
+	case "staticcheck":
+		return "install staticcheck"
+	case "govulncheck":
+		return "install govulncheck"
+	case "clippy", "cargo-test":
+		return "ensure rustup/cargo and clippy are installed"
+	case "cargo-audit":
+		return "install cargo-audit"
+	case "semgrep":
+		return "install semgrep and add .semgrep.yml, .semgrep.yaml, or .semgrep/"
 	default:
 		return "install or disable this sensor in .harness/config.yaml"
 	}
@@ -500,7 +534,7 @@ func fileContains(path string, needles ...string) bool {
 }
 
 func hasGeneratedIgnore(path string) bool {
-	return fileContains(path, "memory.db", "reports/", "repairs/", "screenshots/")
+	return fileContains(path, "memory.db", "reports/", "repairs/", "screenshots/", "tmp/")
 }
 
 func (a *doctorAudit) fail(message string) {

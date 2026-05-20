@@ -292,29 +292,60 @@ func DefaultFor(stack string) Config {
 			E2E:          []string{"playwright"},
 		}
 	case "python":
+		c.Thresholds = ThresholdsConfig{
+			Correctness: 80,
+			Coverage:    70,
+			Security:    85,
+			Contract:    80,
+		}
+		c.Weights = DimensionWeights{
+			Correctness: 35,
+			Coverage:    25,
+			Security:    20,
+			Contract:    20,
+		}
 		c.Adapters = AdaptersConfig{
-			Lint:     []string{},
-			Test:     []string{},
-			Coverage: []string{},
-			Security: []string{},
+			Lint:     []string{"ruff", "mypy"},
+			Test:     []string{"pytest"},
+			Coverage: []string{"pytest-cov"},
+			Security: []string{"pip-audit"},
 			Behavior: []string{"approved-fixtures"},
-			E2E:      []string{},
 		}
 	case "go":
+		c.Thresholds = ThresholdsConfig{
+			Correctness: 80,
+			Coverage:    70,
+			Security:    85,
+			Contract:    80,
+		}
+		c.Weights = DimensionWeights{
+			Correctness: 35,
+			Coverage:    25,
+			Security:    20,
+			Contract:    20,
+		}
 		c.Adapters = AdaptersConfig{
-			Lint:     []string{},
-			Test:     []string{},
-			Coverage: []string{},
-			Security: []string{},
+			Lint:     []string{"go-vet", "staticcheck"},
+			Test:     []string{"go-test"},
+			Coverage: []string{"go-test-coverage"},
+			Security: []string{"govulncheck"},
 			Behavior: []string{"approved-fixtures"},
-			E2E:      []string{},
 		}
 	case "rust":
+		c.Thresholds = ThresholdsConfig{
+			Correctness: 80,
+			Security:    85,
+			Contract:    80,
+		}
+		c.Weights = DimensionWeights{
+			Correctness: 45,
+			Security:    25,
+			Contract:    30,
+		}
 		c.Adapters = AdaptersConfig{
-			Lint:     []string{},
-			Test:     []string{},
-			Coverage: []string{},
-			Security: []string{},
+			Lint:     []string{"clippy"},
+			Test:     []string{"cargo-test"},
+			Security: []string{"cargo-audit"},
 			Behavior: []string{"approved-fixtures"},
 		}
 	default:

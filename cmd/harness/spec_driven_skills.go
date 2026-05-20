@@ -92,6 +92,8 @@ source of truth.
 
 7. Validate
    - Run harness sprint qa --format=json after meaningful changes.
+   - If Doctor reports safe config drift or says to run doctor --fix, run
+     harness doctor --fix before asking the user.
    - If FAIL, run harness sprint repair, read .harness/repairs/latest.md, fix
      findings, and rerun QA.
    - Repeat until PASS.
@@ -265,12 +267,14 @@ Validation is Harness-owned and deterministic.
 
 1. Run harness sprint qa --format=json.
 2. Read .harness/reports/latest.json.
-3. If verdict is FAIL, run harness sprint repair.
-4. Read .harness/repairs/latest.md.
-5. Fix the listed findings without weakening the agreed contract.
-6. Rerun QA.
-7. Repeat until PASS.
-8. Run harness sprint score only after PASS.
+3. If Doctor reports safe config drift or says to run doctor --fix, run
+   harness doctor --fix autonomously.
+4. If verdict is FAIL, run harness sprint repair.
+5. Read .harness/repairs/latest.md.
+6. Fix the listed findings without weakening the agreed contract.
+7. Rerun QA.
+8. Repeat until PASS.
+9. Run harness sprint score only after PASS.
 
 ## Human Approval Boundaries
 

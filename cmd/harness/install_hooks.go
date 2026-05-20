@@ -549,6 +549,7 @@ Harness function calls:
 - harness.repair: ` + "`" + invoke + ` sprint repair` + "`" + `
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
+- harness.doctor_fix: ` + "`" + invoke + ` doctor --fix` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
 
 ` + planningAutomationProtocol(planningMode) + `
@@ -579,7 +580,10 @@ Autonomous protocol:
 10. Read .harness/reports/latest.json. If the verdict is FAIL, run
    ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix the
    listed findings, and rerun QA. Repeat until verdict is PASS.
-11. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS. Never declare a
+11. If Doctor reports safe Harness config drift or says to run doctor --fix,
+   run ` + "`" + invoke + ` doctor --fix` + "`" + ` autonomously before asking the user.
+   Only ask for user approval when installing or changing project dependencies.
+12. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS. Never declare a
    sprint complete with FAIL.
 
 Only ask the user for product decisions, acceptance-criteria changes, dependency
@@ -613,6 +617,7 @@ Harness function calls:
 - harness.repair: ` + "`" + invoke + ` sprint repair` + "`" + `
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
+- harness.doctor_fix: ` + "`" + invoke + ` doctor --fix` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
 
 ` + planningAutomationProtocol(planningMode) + `
@@ -630,7 +635,9 @@ Autonomous protocol for Claude Code:
 6. Read .harness/reports/latest.json. If verdict is FAIL, run
    ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix
    findings, and rerun QA until PASS.
-7. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
+7. If Doctor reports safe Harness config drift or says to run doctor --fix,
+   run ` + "`" + invoke + ` doctor --fix` + "`" + ` autonomously before asking the user.
+8. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
 
 Only ask the user for product decisions, acceptance criteria changes,
 dependency installation approval when it changes the project stack, or visual
@@ -851,6 +858,7 @@ Rules:
 - Implement only the current agreed sprint and preferably one atomic task at a time.
 - Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness_spec_planner.
 - After meaningful changes, run harness sprint qa --format=json.
+- If Harness Doctor reports safe config drift, run harness doctor --fix before asking the user.
 - If QA fails, run harness sprint repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
 - Run harness sprint score only after QA is PASS.
 """
@@ -940,6 +948,7 @@ Rules:
 - Implement only the current agreed sprint and preferably one atomic task at a time.
 - Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness-spec-planner.
 - After meaningful changes, run harness sprint qa --format=json.
+- If Harness Doctor reports safe config drift, run harness doctor --fix before asking the user.
 - If QA fails, run harness sprint repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
 - Run harness sprint score only after QA is PASS.
 `

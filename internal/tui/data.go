@@ -608,7 +608,7 @@ func loadDoctorState(harnessDir, projectRoot string) DoctorState {
 			doctor.Alerts = append(doctor.Alerts, err)
 		}
 		if len(cfg.AllAdapterNames()) == 0 || !hasTUIStackAdapters(cfg) {
-			if info.Stack == "node" || info.Stack == "typescript" {
+			if tuiStackSupportsAdapters(info.Stack) {
 				doctor.Risks = append(doctor.Risks, "no adapters configured for detected "+info.Stack+" stack")
 			} else {
 				doctor.Alerts = append(doctor.Alerts, "contract-only validation; stack adapters are not configured")
@@ -632,6 +632,15 @@ func hasTUIStackAdapters(cfg config.Config) bool {
 		len(cfg.Adapters.Complexity)+
 		len(cfg.Adapters.Architecture)+
 		len(cfg.Adapters.E2E) > 0
+}
+
+func tuiStackSupportsAdapters(stack string) bool {
+	switch stack {
+	case "node", "typescript", "python", "go", "rust":
+		return true
+	default:
+		return false
+	}
 }
 
 func packageScripts(projectRoot string) []string {
