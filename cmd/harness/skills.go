@@ -114,16 +114,27 @@ func ensureAgentProtocolMode(root string, skillsEnabled bool) error {
 	}
 	text := string(existing)
 	hasSkillRef := strings.Contains(text, ".harness/skills/contract-authoring/SKILL.md")
-	if skillsEnabled && hasSkillRef {
+	isCurrent := agentProtocolIsCurrent(text)
+	if skillsEnabled && hasSkillRef && isCurrent {
 		return nil
 	}
-	if !skillsEnabled && !hasSkillRef {
+	if !skillsEnabled && !hasSkillRef && isCurrent {
 		return nil
 	}
 	if strings.Contains(text, "## Harness Agent Protocol") {
 		return os.WriteFile(path, []byte(content), 0o644)
 	}
+	if strings.Contains(text, "# Harness Agent Protocol") {
+		return os.WriteFile(path, []byte(content), 0o644)
+	}
 	return os.WriteFile(path, []byte(strings.TrimSpace(text)+"\n\n"+contractAutomationProtocol(skillsEnabled)+"\n"), 0o644)
+}
+
+func agentProtocolIsCurrent(text string) bool {
+	return strings.Contains(text, "harness.repair") &&
+		strings.Contains(text, "sprint repair") &&
+		strings.Contains(text, ".harness/repairs/latest.md") &&
+		strings.Contains(text, "sprint score` only after QA")
 }
 
 const contractAuthoringSkill = `---

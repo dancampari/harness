@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.3
+npx github:dancampari/harness#v0.4.4
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.3 --yes
-npx github:dancampari/harness#v0.4.3 --cli codex --yes
-npx github:dancampari/harness#v0.4.3 --cli claude --yes
-npx github:dancampari/harness#v0.4.3 --cli cursor --yes
-npx github:dancampari/harness#v0.4.3 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.4.3 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.4.4 --yes
+npx github:dancampari/harness#v0.4.4 --cli codex --yes
+npx github:dancampari/harness#v0.4.4 --cli claude --yes
+npx github:dancampari/harness#v0.4.4 --cli cursor --yes
+npx github:dancampari/harness#v0.4.4 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.4.4 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.3 --yes
-npx github:dancampari/harness#v0.4.3 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.4 --yes
+npx github:dancampari/harness#v0.4.4 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,20 +95,20 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.3 contract propose
-npx github:dancampari/harness#v0.4.3 contract approve --role planner
-npx github:dancampari/harness#v0.4.3 contract approve --role tester
+npx github:dancampari/harness#v0.4.4 contract propose
+npx github:dancampari/harness#v0.4.4 contract approve --role planner
+npx github:dancampari/harness#v0.4.4 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.3 sprint qa
-npx github:dancampari/harness#v0.4.3 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.3 sprint repair
-npx github:dancampari/harness#v0.4.3 sprint score
-npx github:dancampari/harness#v0.4.3 run --resume
+npx github:dancampari/harness#v0.4.4 sprint qa
+npx github:dancampari/harness#v0.4.4 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.4 sprint repair
+npx github:dancampari/harness#v0.4.4 sprint score
+npx github:dancampari/harness#v0.4.4 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -187,7 +187,7 @@ harness contract status
 harness sprint qa --format=json
 harness sprint repair
 harness sprint score
-harness doctor
+harness doctor [--strict]
 ```
 
 The user should not need to say "run Harness" after every task. The installed
@@ -311,6 +311,13 @@ Active dimensions:
     OK   playwright         available
 ```
 
+Use `harness doctor --strict` in CI or before release. Strict mode exits
+non-zero when an active dimension has no available real sensor, config is
+ambiguous, generated agent references are stale, or contract automation skills
+do not include the repair loop. Missing optional alternatives, such as Jest in a
+Vitest project, remain warnings as long as the active dimension has another
+available sensor.
+
 ### Live TUI
 
 `harness run --resume` opens a full-screen Bubble Tea interface. It animates
@@ -345,7 +352,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Activity 1-6/12` and `Sprints 3-8/15`.
 
 ```text
-harness  Autonomous Development Pipeline   v0.4.3
+harness  Autonomous Development Pipeline   v0.4.4
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    98      2.5s    0
@@ -454,7 +461,7 @@ harness init [--force] [--install-hooks] [--cli auto|codex|claude|cursor|all|non
 harness install-hooks [--interactive] [--cli auto|codex|claude|cursor|all|none] [--skills auto|on|off]
 harness skills install [--force]
 harness skills status
-harness doctor
+harness doctor [--strict]
 harness spec
 harness sprint new <goal>
 harness sprint status

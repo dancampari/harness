@@ -103,7 +103,9 @@ The production Node/TypeScript profile includes:
 - `playwright` for E2E and screenshot baseline checks
 
 Run `harness doctor` to inspect active dimensions, registered sensors, and
-missing local tooling.
+missing local tooling. Run `harness doctor --strict` in CI or release checks to
+fail when a dimension lacks an available real sensor, config is ambiguous, or
+generated agent references/skills are stale.
 
 ## Deterministic Boundary
 

@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test ./...
+          TARBALL="$(npm pack)"
+          npm exec --yes --package "./${TARBALL}" -- harness --version
+
+      - name: Build release assets
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/release
+
+          build() {
+            GOOS="$1" GOARCH="$2" go build \
+              -ldflags "-s -w -X main.version=${VERSION}" \
+              -o "dist/release/$3" .
+          }
+
+          build darwin arm64 harness-darwin-arm64
+          build darwin amd64 harness-darwin-x64
+          build linux arm64 harness-linux-arm64
+          build linux amd64 harness-linux-x64
+          build windows arm64 harness-win32-arm64.exe
+          build windows amd64 harness-win32-x64.exe
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/release/* \
+            --title "Harness ${GITHUB_REF_NAME}" \
+            --generate-notes

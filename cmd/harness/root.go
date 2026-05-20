@@ -68,7 +68,7 @@ Workflow:
   harness sprint qa               # runs Evaluator (isolated subprocess)
   harness sprint repair           # prints the latest repair brief after FAIL
   harness sprint score            # consolidates PASS + updates progress.md
-  harness doctor                  # checks active dimensions and sensor tooling
+  harness doctor --strict         # checks active dimensions, sensors, and generated agent references
   harness run --resume            # live TUI of the whole pipeline
 
 Use 'harness <command> --help' for details.`

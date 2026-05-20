@@ -29,6 +29,7 @@
 - [x] Playwright screenshot current/baseline comparison
 - [x] `harness sprint qa --accept-screenshots`
 - [x] `harness doctor`
+- [x] `harness doctor --strict` for CI-safe harness coverage checks
 - [x] npx package wrapper and install docs
 - [x] Interactive setup choices for CLI, contract skills, and install scope
 - [x] Arrow-key setup prompts with Enter confirmation
@@ -65,7 +66,8 @@
 
 ## v0.6 - Distribution Hardening
 
-- [ ] GitHub Actions release job to cross-compile Linux/macOS/Windows for amd64/arm64
+- [x] GitHub Actions CI for formatting, vet, tests, build, npm pack, and npm exec smoke
+- [x] GitHub Actions release job to cross-compile Linux/macOS/Windows for amd64/arm64
 - [ ] Publish npm package with prebuilt binaries in `dist/`
 - [ ] Homebrew tap
 - [ ] Signed binaries

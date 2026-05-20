@@ -1,9 +1,11 @@
 package harness
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dancampari/harness/internal/adapters"
 	"github.com/dancampari/harness/internal/config"
@@ -11,17 +13,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type doctorOptions struct {
+	Strict bool
+}
+
+type doctorFinding struct {
+	Severity string
+	Message  string
+}
+
+type doctorAudit struct {
+	failures []doctorFinding
+	warnings []doctorFinding
+}
+
 func newDoctorCmd() *cobra.Command {
-	return &cobra.Command{
+	var opts doctorOptions
+	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check Harness config and required local sensors",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDoctor(".")
+			return runDoctorWithOptions(".", opts)
 		},
 	}
+	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "exit non-zero when Harness config, sensors, or generated agent references are incomplete")
+	return cmd
 }
 
 func runDoctor(root string) error {
+	return runDoctorWithOptions(root, doctorOptions{})
+}
+
+func runDoctorWithOptions(root string, opts doctorOptions) error {
+	var audit doctorAudit
 	project := detect.DetectProject(root)
 	cfg, err := loadDoctorConfig(root, project.Stack)
 	if err != nil {
@@ -42,8 +66,9 @@ func runDoctor(root string) error {
 		fmt.Println("Config errors:")
 		for _, err := range errs {
 			fmt.Println("  FAIL", err)
+			audit.fail(err)
 		}
-		return nil
+		return finishDoctor(opts, audit)
 	}
 
 	reg := adapters.BuildRegistry()
@@ -58,21 +83,34 @@ func runDoctor(root string) error {
 		names := cfg.AdapterNamesForDimension(dim)
 		if len(names) == 0 {
 			fmt.Println("    FAIL no sensors configured")
+			audit.fail(fmt.Sprintf("%s has no sensors configured", dim))
 			continue
 		}
+		registered := 0
+		available := 0
 		for _, name := range names {
 			s, ok := reg.ByName(name)
 			switch {
 			case !ok:
 				fmt.Printf("    FAIL %-18s not registered in this binary\n", name)
+				audit.fail(fmt.Sprintf("%s sensor %q is configured but not registered", dim, name))
 			case s.Available(root):
 				fmt.Printf("    OK   %-18s available\n", name)
+				registered++
+				available++
 			default:
 				fmt.Printf("    MISS %-18s %s\n", name, installHint(name))
+				registered++
+				audit.warn(fmt.Sprintf("%s sensor %q is configured but unavailable", dim, name))
 			}
 		}
+		if registered > 0 && available == 0 {
+			audit.fail(fmt.Sprintf("%s is active but no registered configured sensor is available", dim))
+		}
 	}
-	return nil
+
+	inspectHarnessCoverage(root, project, &audit)
+	return finishDoctor(opts, audit)
 }
 
 func loadDoctorConfig(root, stack string) (config.Config, error) {
@@ -100,4 +138,161 @@ func installHint(sensor string) string {
 	default:
 		return "install or disable this sensor in .harness/config.yaml"
 	}
+}
+
+func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doctorAudit) {
+	fmt.Println()
+	fmt.Println("Harness coverage:")
+	harnessDir := filepath.Join(root, ".harness")
+	if _, err := os.Stat(harnessDir); err != nil {
+		fmt.Println("  FAIL .harness/ is missing; run harness setup")
+		audit.fail(".harness/ is missing")
+		return
+	}
+
+	if fileContains(filepath.Join(harnessDir, "agent-protocol.md"), "harness.repair", "sprint repair") {
+		fmt.Println("  OK   agent protocol includes repair loop")
+	} else {
+		fmt.Println("  FAIL .harness/agent-protocol.md is missing or stale")
+		audit.fail(".harness/agent-protocol.md is missing or does not include the repair loop")
+	}
+
+	if hasGeneratedIgnore(filepath.Join(harnessDir, ".gitignore")) {
+		fmt.Println("  OK   generated local artifacts are ignored")
+	} else {
+		fmt.Println("  WARN .harness/.gitignore should ignore memory.db, reports/, repairs/, screenshots/")
+		audit.warn(".harness/.gitignore does not ignore all generated local artifacts")
+	}
+
+	setup := readSetupState(filepath.Join(harnessDir, "setup.json"))
+	if setup.ContractSkillsEnabled || skillsInstalled(harnessDir) {
+		if skillsInstalled(harnessDir) {
+			fmt.Println("  OK   contract automation skills installed")
+		} else {
+			fmt.Println("  FAIL contract skills enabled but .harness/skills is missing")
+			audit.fail("contract skills are enabled but .harness/skills is missing")
+		}
+		authorSkill := filepath.Join(harnessDir, "skills", "contract-authoring", "SKILL.md")
+		if fileContains(authorSkill, "sprint repair", "repairs/latest.md") {
+			fmt.Println("  OK   contract-authoring skill includes repair loop")
+		} else {
+			fmt.Println("  FAIL contract-authoring skill is stale; run harness skills install --force")
+			audit.fail("contract-authoring skill is stale; run harness skills install --force")
+		}
+	}
+
+	expected := expectedReferences(setup.CodingCLI, project.CodingCLIs)
+	if len(expected) == 0 {
+		fmt.Println("  WARN no coding CLI reference detected; Harness will rely on manual use")
+		audit.warn("no coding CLI reference detected")
+		return
+	}
+	for _, cli := range expected {
+		checkAgentReference(root, cli, audit)
+	}
+}
+
+type setupState struct {
+	CodingCLI             string `json:"coding_cli"`
+	ContractSkillsEnabled bool   `json:"contract_skills_enabled"`
+}
+
+func readSetupState(path string) setupState {
+	var state setupState
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return state
+	}
+	_ = json.Unmarshal(b, &state)
+	state.CodingCLI = normalizeCLI(state.CodingCLI)
+	return state
+}
+
+func expectedReferences(setupCLI string, detected []string) []string {
+	switch setupCLI {
+	case "codex", "claude", "cursor":
+		return []string{setupCLI}
+	case "all":
+		return []string{"claude", "codex", "cursor"}
+	case "none":
+		return nil
+	}
+	return detected
+}
+
+func checkAgentReference(root, cli string, audit *doctorAudit) {
+	switch cli {
+	case "codex":
+		if fileContains(filepath.Join(root, "AGENTS.md"), "## Harness Gate", "harness.repair", "sprint repair") {
+			fmt.Println("  OK   Codex AGENTS.md includes repair protocol")
+		} else {
+			fmt.Println("  FAIL Codex AGENTS.md is missing or stale")
+			audit.fail("Codex AGENTS.md is missing or stale")
+		}
+		if fileContains(filepath.Join(root, ".codex", "hooks.json"), "guard pre-tool") {
+			fmt.Println("  OK   Codex edit guard installed")
+		} else {
+			fmt.Println("  WARN Codex edit guard not found in .codex/hooks.json")
+			audit.warn("Codex edit guard not found")
+		}
+	case "claude":
+		if fileContains(filepath.Join(root, "CLAUDE.md"), "## Harness Gate", "harness.repair", "sprint repair") {
+			fmt.Println("  OK   Claude CLAUDE.md includes repair protocol")
+		} else {
+			fmt.Println("  FAIL Claude CLAUDE.md is missing or stale")
+			audit.fail("Claude CLAUDE.md is missing or stale")
+		}
+		if fileContains(filepath.Join(root, ".claude", "settings.json"), "guard pre-tool") {
+			fmt.Println("  OK   Claude edit guard installed")
+		} else {
+			fmt.Println("  WARN Claude edit guard not found in .claude/settings.json")
+			audit.warn("Claude edit guard not found")
+		}
+	case "cursor":
+		if fileContains(filepath.Join(root, ".cursor", "rules", "harness.mdc"), "Harness Engineering", "sprint repair") {
+			fmt.Println("  OK   Cursor rule includes repair protocol")
+		} else {
+			fmt.Println("  FAIL Cursor rule is missing or stale")
+			audit.fail("Cursor rule is missing or stale")
+		}
+	}
+}
+
+func fileContains(path string, needles ...string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	text := string(b)
+	for _, needle := range needles {
+		if !strings.Contains(text, needle) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasGeneratedIgnore(path string) bool {
+	return fileContains(path, "memory.db", "reports/", "repairs/", "screenshots/")
+}
+
+func (a *doctorAudit) fail(message string) {
+	a.failures = append(a.failures, doctorFinding{Severity: "FAIL", Message: message})
+}
+
+func (a *doctorAudit) warn(message string) {
+	a.warnings = append(a.warnings, doctorFinding{Severity: "WARN", Message: message})
+}
+
+func finishDoctor(opts doctorOptions, audit doctorAudit) error {
+	fmt.Println()
+	if len(audit.failures) == 0 {
+		fmt.Printf("Doctor summary: PASS (%d warning(s))\n", len(audit.warnings))
+		return nil
+	}
+	fmt.Printf("Doctor summary: FAIL (%d issue(s), %d warning(s))\n", len(audit.failures), len(audit.warnings))
+	if opts.Strict {
+		return fmt.Errorf("doctor strict failed: %d issue(s)", len(audit.failures))
+	}
+	return nil
 }

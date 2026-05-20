@@ -5,25 +5,28 @@ on:
   pull_request:
 
 jobs:
-  smoke:
-    runs-on: windows-latest
-
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Go
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Setup Node
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
 
-      - name: Verify formatting
+      - name: Check formatting
         shell: pwsh
         run: |
           $files = gofmt -l .
@@ -38,24 +41,31 @@ jobs:
       - name: Test
         run: go test -count=1 ./...
 
-      - name: Build CLI
+      - name: Build
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          go build -ldflags "-X main.version=$version" -o .\dist\harness.exe .
+          $exe = "dist/harness$(go env GOEXE)"
+          go build -ldflags "-X main.version=$version" -o $exe .
 
-      - name: Validate npm package
+      - name: Pack npm tarball
         shell: pwsh
         run: |
           $packOutput = npm pack
           $tgz = Resolve-Path (($packOutput | Select-Object -Last 1).Trim())
+          "TARBALL=$tgz" >> $env:GITHUB_ENV
+
+      - name: Smoke npm package
+        shell: pwsh
+        run: |
           $cache = Join-Path $env:RUNNER_TEMP "npm-cache"
           $cwd = Join-Path $env:RUNNER_TEMP "npx-cwd"
           New-Item -ItemType Directory -Force -Path $cwd | Out-Null
           Push-Location $cwd
           try {
-            npm exec --yes --cache "$cache" --package "$tgz" -- harness --version
+            npm exec --yes --cache "$cache" --package "$env:TARBALL" -- harness --version
+            npm exec --yes --cache "$cache" --package "$env:TARBALL" -- harness doctor --help
           } finally {
             Pop-Location
           }
