@@ -13,7 +13,7 @@ func Execute(version string) error {
 		Version: version,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSetup(setup)
+			return runSetup(setup, version)
 		},
 	}
 
@@ -25,11 +25,11 @@ func Execute(version string) error {
 	root.Flags().BoolVar(&setup.StartTUI, "start", false, "launch the live TUI after setup")
 
 	root.AddCommand(
-		newSetupCmd(),
+		newSetupCmd(version),
 		newInitCmd(),
 		newSpecCmd(),
 		newSprintCmd(),
-		newRunCmd(),
+		newRunCmd(version),
 		newProgressCmd(),
 		newTrendCmd(),
 		newExplainCmd(),

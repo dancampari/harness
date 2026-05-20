@@ -59,12 +59,13 @@ Ship a demo dashboard.
 		t.Fatal(err)
 	}
 
-	m := newModel(harnessDir, true)
+	m := newModel(harnessDir, true, "0.0.0-test")
 	m.width = 100
 	view := m.View()
 	for _, expected := range []string{
 		"harness",
 		"Autonomous Development Pipeline",
+		"v0.0.0-test",
 		"Sprints",
 		"Verdict",
 		"Activity",
@@ -118,7 +119,7 @@ func TestRefreshDetectsHarnessArtifactChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := newModel(harnessDir, true)
+	m := newModel(harnessDir, true, "dev")
 	initial := m.signature
 	reportPath := filepath.Join(harnessDir, "reports", "latest.json")
 	report := `{

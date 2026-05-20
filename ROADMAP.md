@@ -34,6 +34,7 @@
 - [x] Arrow-key setup prompts with Enter confirmation
 - [x] Agent contract-authoring skill pack in `.harness/skills/`
 - [x] Animated live pipeline dashboard with automatic QA verdict panel
+- [x] Live TUI header shows the packaged release version
 - [x] CI smoke test for vet, tests, build, npm pack, and npm exec
 
 ## v0.4 - Broader Stack Coverage

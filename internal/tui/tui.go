@@ -77,8 +77,8 @@ var (
 )
 
 // Run launches the TUI. If resume is true, it loads existing state.
-func Run(harnessDir string, resume bool) error {
-	m := newModel(harnessDir, resume)
+func Run(harnessDir string, resume bool, version string) error {
+	m := newModel(harnessDir, resume, version)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
@@ -87,6 +87,7 @@ func Run(harnessDir string, resume bool) error {
 type model struct {
 	root         string
 	project      string
+	version      string
 	sprints      []sprintRow
 	activity     []string
 	latestReport *evaluator.EvaluationResult
@@ -113,10 +114,11 @@ type sprintRow struct {
 
 type tickMsg time.Time
 
-func newModel(root string, resume bool) *model {
+func newModel(root string, resume bool, version string) *model {
 	m := &model{
 		root:      root,
 		project:   projectName(root),
+		version:   displayVersion(version),
 		startTime: time.Now(),
 		lastSeen:  time.Now(),
 		lastEvent: "watching .harness",
@@ -331,7 +333,7 @@ func (m *model) View() string {
 
 func (m *model) renderHeader(width int) string {
 	left := titleStyle.Render("harness")
-	right := subtitleStyle.Render("Autonomous Development Pipeline")
+	right := subtitleStyle.Render("Autonomous Development Pipeline   " + m.version)
 	line := lipgloss.JoinHorizontal(lipgloss.Center, left, right)
 	return lipgloss.NewStyle().
 		Width(width).
@@ -748,6 +750,17 @@ func defaultString(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func displayVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return "dev"
+	}
+	if version == "dev" || strings.HasPrefix(version, "v") {
+		return version
+	}
+	return "v" + version
 }
 
 func readOptionalFile(path string) string {

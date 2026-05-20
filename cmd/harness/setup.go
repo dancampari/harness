@@ -30,7 +30,7 @@ type setupChoices struct {
 	Scope  string
 }
 
-func newSetupCmd() *cobra.Command {
+func newSetupCmd(version string) *cobra.Command {
 	var opts setupOptions
 	cmd := &cobra.Command{
 		Use:   "setup",
@@ -43,7 +43,7 @@ Harness asks for the coding CLI, contract automation skills, and install
 scope. In non-interactive mode, use --yes or explicit flags.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSetup(opts)
+			return runSetup(opts, version)
 		},
 	}
 	cmd.Flags().StringVar(&opts.CLI, "cli", "auto", "coding CLI to configure: auto|codex|claude|cursor|all|none")
@@ -55,7 +55,7 @@ scope. In non-interactive mode, use --yes or explicit flags.`,
 	return cmd
 }
 
-func runSetup(opts setupOptions) error {
+func runSetup(opts setupOptions, version string) error {
 	if opts.CLI == "" {
 		opts.CLI = "auto"
 	}
@@ -125,7 +125,7 @@ func runSetup(opts setupOptions) error {
 	fmt.Println("Codex, Claude Code, and Cursor interact with Harness by running these CLI commands from the installed references/hooks.")
 
 	if opts.StartTUI {
-		return runTUI(true)
+		return runTUI(true, version)
 	}
 	return nil
 }
