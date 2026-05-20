@@ -89,11 +89,28 @@ func (m *Manager) Status() (Status, error) {
 		return Status{}, err
 	}
 	st := Status{Number: n, Contract: "missing", Build: "pending", QA: "pending", Score: "-"}
+	var ag agreement.Status
 	cpath := filepath.Join(m.root, "contracts", fmt.Sprintf("sprint-%03d.md", n))
 	if c, err := planner.Parse(cpath); err == nil {
 		st.Goal = c.Title
-		if ag, err := agreement.NewManager(m.root).Status(n); err == nil {
+		if agStatus, err := agreement.NewManager(m.root).Status(n); err == nil {
+			ag = agStatus
 			st.Contract = ag.State
+		}
+	}
+	reportPath := filepath.Join(m.root, "reports", fmt.Sprintf("sprint-%03d.json", n))
+	if b, err := os.ReadFile(reportPath); err == nil {
+		var ev evaluator.EvaluationResult
+		if json.Unmarshal(b, &ev) == nil {
+			st.Build = "done"
+			st.QA = strings.ToLower(ev.Verdict)
+			st.Score = fmt.Sprintf("%d/100", ev.TotalScore)
+			if !ag.ReportIsCurrent(ev.Timestamp) {
+				st.Build = "stale"
+				st.QA = "stale"
+				st.Score = "-"
+			}
+			return st, nil
 		}
 	}
 	epath := filepath.Join(m.root, "evaluations", fmt.Sprintf("sprint-%03d.md", n))
@@ -106,6 +123,11 @@ func (m *Manager) Status() (Status, error) {
 		}
 		if m := regexp.MustCompile(`Aggregate Score:\s*(\d+)`).FindStringSubmatch(string(b)); m != nil {
 			st.Score = m[1] + "/100"
+		}
+		if !strings.EqualFold(st.Contract, "agreed") {
+			st.Build = "stale"
+			st.QA = "stale"
+			st.Score = "-"
 		}
 	}
 	return st, nil
@@ -302,6 +324,10 @@ func (m *Manager) Consolidate() (*ConsolidatedReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	ag, err := agreement.NewManager(m.root).Status(n)
+	if err != nil {
+		return nil, err
+	}
 	reportPath := filepath.Join(m.root, "reports", fmt.Sprintf("sprint-%03d.json", n))
 	b, err := os.ReadFile(reportPath)
 	if err != nil {
@@ -310,6 +336,10 @@ func (m *Manager) Consolidate() (*ConsolidatedReport, error) {
 	var ev evaluator.EvaluationResult
 	if err := json.Unmarshal(b, &ev); err != nil {
 		return nil, err
+	}
+	if !ag.ReportIsCurrent(ev.Timestamp) {
+		return nil, fmt.Errorf("contract agreement required before scoring: sprint %03d report is stale or unagreed; run contract propose/approve, then rerun harness sprint qa",
+			n)
 	}
 
 	// Record in memory.db.
@@ -390,6 +420,10 @@ func (m *Manager) List() ([]SprintListItem, error) {
 			Score:   ev.TotalScore,
 			Verdict: ev.Verdict,
 		})
+		if ag, err := agreement.NewManager(m.root).Status(ev.SprintNumber); err == nil && !ag.ReportIsCurrent(ev.Timestamp) {
+			out[len(out)-1].Score = 0
+			out[len(out)-1].Verdict = "STALE"
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Number < out[j].Number })
 	return out, nil

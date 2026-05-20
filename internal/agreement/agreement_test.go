@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAgreementRequiresSameHashFromAllRoles(t *testing.T) {
@@ -32,6 +33,15 @@ func TestAgreementRequiresSameHashFromAllRoles(t *testing.T) {
 	}
 	if st.State != "agreed" {
 		t.Fatalf("expected agreed, got %+v", st)
+	}
+	if st.AgreedAt.IsZero() {
+		t.Fatal("expected agreed status to include agreement timestamp")
+	}
+	if st.ReportIsCurrent(st.AgreedAt.Add(-time.Second)) {
+		t.Fatal("expected report generated before agreement to be stale")
+	}
+	if !st.ReportIsCurrent(st.AgreedAt.Add(time.Second)) {
+		t.Fatal("expected report generated after agreement to be current")
 	}
 	if err := m.EnsureAgreed(1); err != nil {
 		t.Fatal(err)

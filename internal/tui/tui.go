@@ -113,6 +113,7 @@ type sprintRow struct {
 	Time     string
 	Findings int
 	Scored   bool
+	Stale    bool
 }
 
 type tickMsg time.Time
@@ -212,15 +213,20 @@ func (m *model) loadSprints() []sprintRow {
 			Score:    "-",
 			Time:     "-",
 		}
+		var ag agreement.Status
 		if c, err := planner.Parse(filepath.Join(dir, e.Name())); err == nil {
 			row.Goal = c.Title
 			if st, err := agreement.NewManager(m.root).Status(n); err == nil {
+				ag = st
 				row.Contract = strings.ToUpper(st.State)
 			}
 		}
 
+		hasLegacyResult := false
+		hasCurrentReport := false
 		ev := filepath.Join(m.root, "evaluations", fmt.Sprintf("sprint-%03d.md", n))
 		if b, err := os.ReadFile(ev); err == nil {
+			hasLegacyResult = true
 			row.Build = "DONE"
 			s := string(b)
 			switch {
@@ -235,13 +241,33 @@ func (m *model) loadSprints() []sprintRow {
 		if b, err := os.ReadFile(rp); err == nil {
 			var er evaluator.EvaluationResult
 			if json.Unmarshal(b, &er) == nil {
+				hasLegacyResult = true
 				row.Score = fmt.Sprintf("%d", er.TotalScore)
 				row.QA = er.Verdict
 				row.Time = compactSeconds(er.DurationSeconds)
 				row.Findings = countFindings(er)
+				if ag.ReportIsCurrent(er.Timestamp) {
+					hasCurrentReport = true
+				} else {
+					row.Stale = true
+				}
 			}
 		}
 		row.Scored = strings.Contains(progress, fmt.Sprintf("Sprint %03d", n))
+		if qaDone(row) && !hasCurrentReport {
+			row.Stale = true
+		}
+		if !contractDone(row) && (hasLegacyResult || row.Scored) {
+			row.Stale = true
+		}
+		if row.Stale {
+			row.Build = "STALE"
+			row.QA = "STALE"
+			row.Score = "-"
+			row.Time = "-"
+			row.Findings = 0
+			row.Scored = false
+		}
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Number < rows[j].Number })
@@ -278,11 +304,33 @@ func (m *model) loadLatestReport() *evaluator.EvaluationResult {
 	return &er
 }
 
+func (m *model) reportAgreementState(sprintNumber int, reportTime time.Time) (string, bool) {
+	st, err := agreement.NewManager(m.root).Status(sprintNumber)
+	if err != nil {
+		return "UNKNOWN", false
+	}
+	state := strings.ToUpper(st.State)
+	if st.ReportIsCurrent(reportTime) {
+		return state, true
+	}
+	if state == "AGREED" {
+		return "STALE", false
+	}
+	return state, false
+}
+
 func (m *model) activityFromLatestReport() []string {
 	if m.latestReport == nil {
 		return nil
 	}
 	er := *m.latestReport
+	if state, current := m.reportAgreementState(er.SprintNumber, er.Timestamp); !current {
+		return []string{
+			fmt.Sprintf("Contract gate pending for sprint %03d: %s", er.SprintNumber, state),
+			fmt.Sprintf("Previous QA %s score %d/100 is stale and ignored", er.Verdict, er.TotalScore),
+			"Next: contract propose, planner approve, tester approve, then rerun QA",
+		}
+	}
 	lines := []string{
 		fmt.Sprintf("QA %s  sprint %03d  score %d/100  runtime %s",
 			er.Verdict, er.SprintNumber, er.TotalScore, compactSeconds(er.DurationSeconds)),
@@ -383,6 +431,9 @@ func renderSprintRow(r sprintRow, width, frame int) string {
 		r.Time,
 		fmt.Sprintf("%d", r.Findings),
 	)
+	if r.Stale {
+		return warnStyle.Render(line)
+	}
 	switch strings.ToUpper(r.QA) {
 	case "PASS":
 		if r.Scored {
@@ -455,6 +506,9 @@ func contractCell(r sprintRow, frame int) string {
 }
 
 func buildCell(r sprintRow, frame int) string {
+	if strings.EqualFold(r.Build, "STALE") {
+		return "× STALE"
+	}
 	if buildDone(r) {
 		return "✓ DONE"
 	}
@@ -470,6 +524,8 @@ func qaCell(r sprintRow, frame int) string {
 		return "✓ PASS"
 	case "FAIL":
 		return "× FAIL"
+	case "STALE":
+		return "× STALE"
 	}
 	if buildDone(r) {
 		return spinner(frame) + " QA"
@@ -478,6 +534,9 @@ func qaCell(r sprintRow, frame int) string {
 }
 
 func scoreCell(r sprintRow, frame int) string {
+	if r.Stale {
+		return "stale"
+	}
 	if r.Scored {
 		return "✓ " + defaultString(r.Score, "-")
 	}
@@ -524,6 +583,15 @@ func (m *model) renderVerdict(width int) string {
 	var sb strings.Builder
 	sb.WriteString(panelTitleStyle.Render("Verdict"))
 	sb.WriteString("\n")
+	if state, current := m.reportAgreementState(er.SprintNumber, er.Timestamp); !current {
+		summary := fmt.Sprintf("sprint %03d  BLOCKED  contract %s", er.SprintNumber, state)
+		sb.WriteString(warnStyle.Render(truncate(summary, width-2)))
+		sb.WriteString("\n")
+		sb.WriteString(mutedStyle.Render(truncate(
+			fmt.Sprintf("previous QA %s %d/100 is stale; rerun QA after planner/tester agreement",
+				er.Verdict, er.TotalScore), width-2)))
+		return sb.String()
+	}
 	summary := fmt.Sprintf("sprint %03d  %s  score %d/100  runtime %s",
 		er.SprintNumber, er.Verdict, er.TotalScore, compactSeconds(er.DurationSeconds))
 	if er.Verdict == "PASS" {
@@ -639,10 +707,12 @@ func renderActivityLine(line string) string {
 	case strings.Contains(low, " fail") || strings.Contains(low, "fail ") ||
 		strings.Contains(low, "critical") || strings.Contains(low, " high "):
 		return badStyle.Render(line)
+	case strings.Contains(low, "miss") || strings.Contains(low, "missing") ||
+		strings.Contains(low, "stale") || strings.Contains(low, "blocked") ||
+		strings.Contains(low, "draft") || strings.Contains(low, "pending"):
+		return warnStyle.Render(line)
 	case strings.Contains(low, "pass") || strings.Contains(low, "satisfied"):
 		return goodStyle.Render(line)
-	case strings.Contains(low, "miss") || strings.Contains(low, "missing"):
-		return warnStyle.Render(line)
 	default:
 		return mutedStyle.Render(line)
 	}
@@ -650,10 +720,13 @@ func renderActivityLine(line string) string {
 
 func (m *model) renderStatus() string {
 	state := "idle"
+	if latest := latestSprint(m.sprints); latest != nil && latest.Stale {
+		state = "blocked"
+	}
 	if latest := latestSprint(m.sprints); latest != nil && latest.QA == "FAIL" {
 		state = "attention"
 	}
-	if latest := latestSprint(m.sprints); latest != nil && latest.QA == "PASS" {
+	if latest := latestSprint(m.sprints); latest != nil && latest.QA == "PASS" && !latest.Stale {
 		state = "ready"
 	}
 	active := 0
@@ -797,6 +870,8 @@ func stageText(value string) string {
 		return "PASS"
 	case "FAIL":
 		return "FAIL"
+	case "STALE":
+		return "stale"
 	case "DRAFT":
 		return "draft"
 	default:
@@ -814,6 +889,8 @@ func statusText(value string) string {
 		return "✓ PASS"
 	case "FAIL":
 		return "× FAIL"
+	case "STALE":
+		return "× STALE"
 	case "DRAFT":
 		return "• draft"
 	default:

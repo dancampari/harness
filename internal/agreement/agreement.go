@@ -59,6 +59,7 @@ type Status struct {
 	LockPath       string
 	StructuralOK   bool
 	StructuralErrs []string
+	AgreedAt       time.Time
 }
 
 func NewManager(root string) *Manager {
@@ -140,6 +141,7 @@ func (m *Manager) Status(sprintNumber int) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
+	approvalTimes := map[string]time.Time{}
 	for _, approval := range approvals {
 		if approval.ContractHash != hash {
 			continue
@@ -147,6 +149,9 @@ func (m *Manager) Status(sprintNumber int) (Status, error) {
 		switch approval.Decision {
 		case "approve":
 			st.ApprovedRoles = append(st.ApprovedRoles, approval.Role)
+			if t, err := time.Parse(time.RFC3339, approval.UpdatedAt); err == nil {
+				approvalTimes[approval.Role] = t
+			}
 		case "reject":
 			st.RejectedRoles = append(st.RejectedRoles, approval.Role)
 		}
@@ -176,11 +181,23 @@ func (m *Manager) Status(sprintNumber int) (Status, error) {
 	}
 	if len(st.MissingRoles) == 0 {
 		st.State = "agreed"
+		for _, role := range st.RequiredRoles {
+			if t := approvalTimes[role]; t.After(st.AgreedAt) {
+				st.AgreedAt = t
+			}
+		}
 		return st, nil
 	}
 	st.State = "proposed"
 	st.Reason = "waiting for required approvals"
 	return st, nil
+}
+
+func (s Status) ReportIsCurrent(reportTime time.Time) bool {
+	return strings.EqualFold(s.State, "agreed") &&
+		!s.AgreedAt.IsZero() &&
+		!reportTime.IsZero() &&
+		!reportTime.Before(s.AgreedAt)
 }
 
 func (m *Manager) Propose(sprintNumber int) (Status, error) {

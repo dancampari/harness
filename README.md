@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.0
+npx github:dancampari/harness#v0.4.1
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.0 --yes
-npx github:dancampari/harness#v0.4.0 --cli codex --yes
-npx github:dancampari/harness#v0.4.0 --cli claude --yes
-npx github:dancampari/harness#v0.4.0 --cli cursor --yes
-npx github:dancampari/harness#v0.4.0 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.4.0 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.4.1 --yes
+npx github:dancampari/harness#v0.4.1 --cli codex --yes
+npx github:dancampari/harness#v0.4.1 --cli claude --yes
+npx github:dancampari/harness#v0.4.1 --cli cursor --yes
+npx github:dancampari/harness#v0.4.1 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.4.1 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.0 --yes
-npx github:dancampari/harness#v0.4.0 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.1 --yes
+npx github:dancampari/harness#v0.4.1 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,19 +95,19 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.0 contract propose
-npx github:dancampari/harness#v0.4.0 contract approve --role planner
-npx github:dancampari/harness#v0.4.0 contract approve --role tester
+npx github:dancampari/harness#v0.4.1 contract propose
+npx github:dancampari/harness#v0.4.1 contract approve --role planner
+npx github:dancampari/harness#v0.4.1 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.0 sprint qa
-npx github:dancampari/harness#v0.4.0 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.0 sprint score
-npx github:dancampari/harness#v0.4.0 run --resume
+npx github:dancampari/harness#v0.4.1 sprint qa
+npx github:dancampari/harness#v0.4.1 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.1 sprint score
+npx github:dancampari/harness#v0.4.1 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -215,6 +215,11 @@ By default the required roles are `planner` and `tester`. If the contract file
 changes after approval, the hash changes and the contract state becomes
 `CHANGED`; it must be proposed and approved again before QA.
 
+Reports generated before the contract reached `AGREED` are treated as stale.
+The TUI shows them as `STALE/BLOCKED`, `harness sprint score` refuses to
+consolidate them, and the agent must rerun `harness sprint qa` after the
+planner/tester approvals.
+
 ## Terminal Layout
 
 ### QA Report
@@ -292,7 +297,7 @@ dimension scores, thresholds, findings, and sensors without requiring the user
 to open the markdown report manually.
 
 ```text
-harness  Autonomous Development Pipeline   v0.4.0
+harness  Autonomous Development Pipeline   v0.4.1
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    ⠋ SCORE 2.5s    0

@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dancampari/harness/internal/agreement"
 )
 
 func TestViewRendersDashboardSections(t *testing.T) {
@@ -36,8 +39,20 @@ Ship a demo dashboard.
 	if err := os.WriteFile(filepath.Join(harnessDir, "contracts", "sprint-001.md"), []byte(contract), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	report := `{
+	mgr := agreement.NewManager(harnessDir)
+	if _, err := mgr.Propose(1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.Approve(1, "planner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.Approve(1, "tester"); err != nil {
+		t.Fatal(err)
+	}
+	reportTime := time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)
+	report := fmt.Sprintf(`{
   "schema_version": "2",
+  "timestamp": %q,
   "sprint_number": 1,
   "total_score": 98,
   "verdict": "PASS",
@@ -51,7 +66,7 @@ Ship a demo dashboard.
     }
   },
   "duration_seconds": 2.4
-}`
+}`, reportTime)
 	if err := os.WriteFile(filepath.Join(harnessDir, "reports", "sprint-001.json"), []byte(report), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -77,6 +92,59 @@ Ship a demo dashboard.
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected view to contain %q\n%s", expected, view)
 		}
+	}
+}
+
+func TestDraftContractMakesExistingQAStale(t *testing.T) {
+	root := t.TempDir()
+	harnessDir := filepath.Join(root, ".harness")
+	for _, dir := range []string{"contracts", "reports", "evaluations"} {
+		if err := os.MkdirAll(filepath.Join(harnessDir, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	contract := `# Sprint 001 - demo
+
+## Goal
+Ship a demo dashboard.
+
+## Deliverables
+- ` + "`src/index.ts`" + `
+
+## Acceptance Criteria
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | Works | 8/10 |
+`
+	if err := os.WriteFile(filepath.Join(harnessDir, "contracts", "sprint-001.md"), []byte(contract), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report := fmt.Sprintf(`{
+  "schema_version": "2",
+  "timestamp": %q,
+  "sprint_number": 1,
+  "total_score": 100,
+  "verdict": "PASS",
+  "dimensions": {},
+  "duration_seconds": 1.1
+}`, time.Now().UTC().Format(time.RFC3339Nano))
+	if err := os.WriteFile(filepath.Join(harnessDir, "reports", "sprint-001.json"), []byte(report), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(harnessDir, "reports", "latest.json"), []byte(report), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModel(harnessDir, true, "0.0.0-test")
+	m.width = 100
+	view := m.View()
+	for _, expected := range []string{"DRAFT", "STALE", "BLOCKED", "ignored"} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("expected view to contain %q\n%s", expected, view)
+		}
+	}
+	if strings.Contains(view, "✓ PASS") || strings.Contains(view, "✓ 100") {
+		t.Fatalf("draft contract must not render existing QA as a valid pass\n%s", view)
 	}
 }
 
