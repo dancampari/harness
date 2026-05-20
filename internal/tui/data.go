@@ -135,9 +135,7 @@ func loadDashboardData(harnessDir string) DashboardData {
 		return ti.After(tj)
 	})
 	current := loadCurrentRun(harnessDir)
-	if current.RunID == "" && len(runs) > 0 {
-		current = runs[0]
-	}
+	current = selectCurrentRun(current, runs)
 	if current.Agent == "" {
 		current.Agent = project.Agent
 	}
@@ -255,6 +253,7 @@ func readRunJSON(path string) RunRecord {
 	}
 	run := RunRecord{
 		RunID:       raw.RunID,
+		Number:      inferRunNumber(raw.RunID),
 		Feature:     raw.Feature,
 		Agent:       raw.Agent,
 		Status:      raw.Status,
@@ -284,6 +283,94 @@ func readRunJSON(path string) RunRecord {
 		}
 	}
 	return run
+}
+
+func selectCurrentRun(current RunRecord, runs []RunRecord) RunRecord {
+	if len(runs) == 0 {
+		return current
+	}
+	if current.RunID == "" {
+		return runs[0]
+	}
+	for _, run := range runs {
+		if run.RunID == current.RunID {
+			current.Number = firstPositive(current.Number, run.Number)
+			if current.Feature == "" {
+				current.Feature = run.Feature
+			}
+			if current.UpdatedAt.IsZero() {
+				current.UpdatedAt = run.UpdatedAt
+			}
+			break
+		}
+	}
+	if isAttentionRun(current) {
+		return current
+	}
+	for _, run := range runs {
+		if isAttentionRun(run) {
+			return run
+		}
+	}
+	if isNewerRun(runs[0], current) {
+		return runs[0]
+	}
+	return current
+}
+
+func isAttentionRun(run RunRecord) bool {
+	switch normalizeStatus(run.Status) {
+	case "", "pass", "passed", "done", "accepted", "skip", "skipped":
+		return false
+	default:
+		return true
+	}
+}
+
+func isNewerRun(candidate, current RunRecord) bool {
+	ct := runTime(candidate)
+	tt := runTime(current)
+	if !ct.IsZero() && !tt.IsZero() && ct.After(tt) {
+		return true
+	}
+	if ct.IsZero() || tt.IsZero() || ct.Equal(tt) {
+		return candidate.Number > current.Number && current.Number > 0
+	}
+	return false
+}
+
+func runTime(run RunRecord) time.Time {
+	if !run.UpdatedAt.IsZero() {
+		return run.UpdatedAt
+	}
+	return run.StartedAt
+}
+
+func inferRunNumber(runID string) int {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return 0
+	}
+	if idx := strings.LastIndex(strings.ToLower(runID), "sprint-"); idx >= 0 {
+		var n int
+		if _, err := fmt.Sscanf(runID[idx:], "sprint-%d", &n); err == nil {
+			return n
+		}
+	}
+	var n int
+	if _, err := fmt.Sscanf(runID, "%d", &n); err == nil {
+		return n
+	}
+	return 0
+}
+
+func firstPositive(values ...int) int {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 func loadLegacyRuns(harnessDir string) []RunRecord {

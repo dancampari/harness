@@ -256,6 +256,29 @@ func TestLogsPauseAndDoctorFixShortcutsAreFunctional(t *testing.T) {
 	}
 }
 
+func TestOverviewPrefersActiveRunOverStaleCurrentRunFile(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	appendRun(t, harnessDir, "2026-05-20_22-42-00_sprint-005",
+		"Agent-First Menu Design Workspace", "running", 0)
+
+	data := loadDashboardData(harnessDir)
+	if data.Current.Number != 5 {
+		t.Fatalf("expected active sprint 005 to be current, got number=%d run=%q status=%q",
+			data.Current.Number, data.Current.RunID, data.Current.Status)
+	}
+	if normalizeStatus(data.Current.Status) != "running" {
+		t.Fatalf("expected running current run, got %+v", data.Current)
+	}
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 132
+	m.height = 34
+	view := stripANSI(m.View())
+	if !strings.Contains(view, "Sprint 005") || !strings.Contains(view, "Agent-First Menu Design Workspace") {
+		t.Fatalf("overview should render active sprint 005\n%s", view)
+	}
+}
+
 func writeHarnessFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
