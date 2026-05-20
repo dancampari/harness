@@ -167,7 +167,15 @@ func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doct
 	}
 
 	setup := readSetupState(filepath.Join(harnessDir, "setup.json"))
-	if setup.ContractSkillsEnabled || skillsInstalled(harnessDir) {
+	if setup.PlanningMode == "" {
+		setup.PlanningMode = planningModeFromInstalled(harnessDir)
+	}
+	if setup.ContractSkillsEnabled && setup.PlanningMode == PlanningManual {
+		setup.PlanningMode = PlanningContract
+	}
+	if setup.PlanningMode == PlanningSpecDriven {
+		checkSpecDrivenCoverage(root, harnessDir, audit)
+	} else if setup.PlanningMode == PlanningContract {
 		if skillsInstalled(harnessDir) {
 			fmt.Println("  OK   contract automation skills installed")
 		} else {
@@ -190,12 +198,13 @@ func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doct
 		return
 	}
 	for _, cli := range expected {
-		checkAgentReference(root, cli, audit)
+		checkAgentReference(root, cli, setup.PlanningMode, audit)
 	}
 }
 
 type setupState struct {
 	CodingCLI             string `json:"coding_cli"`
+	PlanningMode          string `json:"planning_mode"`
 	ContractSkillsEnabled bool   `json:"contract_skills_enabled"`
 }
 
@@ -207,7 +216,58 @@ func readSetupState(path string) setupState {
 	}
 	_ = json.Unmarshal(b, &state)
 	state.CodingCLI = normalizeCLI(state.CodingCLI)
+	state.PlanningMode = normalizePlanningMode(state.PlanningMode)
+	if state.PlanningMode == PlanningAuto {
+		state.PlanningMode = ""
+	}
 	return state
+}
+
+func checkSpecDrivenCoverage(root, harnessDir string, audit *doctorAudit) {
+	if specDrivenSkillsInstalled(harnessDir) {
+		fmt.Println("  OK   spec-driven skill pack installed")
+	} else {
+		fmt.Println("  FAIL spec-driven planning enabled but .harness/skills/spec-driven is missing")
+		audit.fail("spec-driven planning enabled but .harness/skills/spec-driven is missing")
+	}
+	specSkill := filepath.Join(harnessDir, "skills", "spec-driven", "SKILL.md")
+	if fileContains(specSkill, "Specify", "Design", "Tasks", "Execute", "Validate", ".harness/contracts/sprint-NNN.md") {
+		fmt.Println("  OK   spec-driven skill includes full planning loop")
+	} else {
+		fmt.Println("  FAIL spec-driven skill is stale; run harness skills install --planning spec-driven --force")
+		audit.fail("spec-driven skill is stale; run harness skills install --planning spec-driven --force")
+	}
+	if fileContains(filepath.Join(harnessDir, "skills", "contract-review", "SKILL.md"), "No implementation starts until the contract status is AGREED") {
+		fmt.Println("  OK   contract-review skill enforces agreement")
+	} else {
+		fmt.Println("  FAIL contract-review skill is stale; run harness skills install --planning spec-driven --force")
+		audit.fail("contract-review skill is stale; run harness skills install --planning spec-driven --force")
+	}
+	for _, rel := range []string{
+		".harness/context/STACK.md",
+		".harness/context/ARCHITECTURE.md",
+		".harness/context/CONVENTIONS.md",
+		".harness/context/TESTING.md",
+		".harness/context/INTEGRATIONS.md",
+		".harness/context/CONCERNS.md",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+			fmt.Printf("  WARN %s is missing\n", rel)
+			audit.warn(rel + " is missing")
+		}
+	}
+	if _, err := os.Stat(filepath.Join(harnessDir, "design")); err == nil {
+		fmt.Println("  OK   design artifact directory exists")
+	} else {
+		fmt.Println("  FAIL .harness/design is missing")
+		audit.fail(".harness/design is missing")
+	}
+	if _, err := os.Stat(filepath.Join(harnessDir, "tasks")); err == nil {
+		fmt.Println("  OK   task artifact directory exists")
+	} else {
+		fmt.Println("  FAIL .harness/tasks is missing")
+		audit.fail(".harness/tasks is missing")
+	}
 }
 
 func expectedReferences(setupCLI string, detected []string) []string {
@@ -222,7 +282,7 @@ func expectedReferences(setupCLI string, detected []string) []string {
 	return detected
 }
 
-func checkAgentReference(root, cli string, audit *doctorAudit) {
+func checkAgentReference(root, cli, planningMode string, audit *doctorAudit) {
 	switch cli {
 	case "codex":
 		if fileContains(filepath.Join(root, "AGENTS.md"), "## Harness Gate", "harness.repair", "sprint repair") {
@@ -237,6 +297,15 @@ func checkAgentReference(root, cli string, audit *doctorAudit) {
 			fmt.Println("  WARN Codex edit guard not found in .codex/hooks.json")
 			audit.warn("Codex edit guard not found")
 		}
+		if planningMode == PlanningSpecDriven {
+			if fileContains(filepath.Join(root, ".codex", "agents", "harness-spec-planner.toml"), "harness_spec_planner", "Specify", "Tasks") &&
+				fileContains(filepath.Join(root, ".codex", "agents", "harness-task-worker.toml"), "harness_task_worker", "AGREED") {
+				fmt.Println("  OK   Codex spec-driven agents installed")
+			} else {
+				fmt.Println("  FAIL Codex spec-driven agents are missing or stale")
+				audit.fail("Codex spec-driven agents are missing or stale")
+			}
+		}
 	case "claude":
 		if fileContains(filepath.Join(root, "CLAUDE.md"), "## Harness Gate", "harness.repair", "sprint repair") {
 			fmt.Println("  OK   Claude CLAUDE.md includes repair protocol")
@@ -250,8 +319,21 @@ func checkAgentReference(root, cli string, audit *doctorAudit) {
 			fmt.Println("  WARN Claude edit guard not found in .claude/settings.json")
 			audit.warn("Claude edit guard not found")
 		}
+		if planningMode == PlanningSpecDriven {
+			if fileContains(filepath.Join(root, ".claude", "agents", "harness-spec-planner.md"), "harness-spec-planner", "Specify", "Tasks") &&
+				fileContains(filepath.Join(root, ".claude", "agents", "harness-task-worker.md"), "harness-task-worker", "AGREED") {
+				fmt.Println("  OK   Claude spec-driven agents installed")
+			} else {
+				fmt.Println("  FAIL Claude spec-driven agents are missing or stale")
+				audit.fail("Claude spec-driven agents are missing or stale")
+			}
+		}
 	case "cursor":
-		if fileContains(filepath.Join(root, ".cursor", "rules", "harness.mdc"), "Harness Engineering", "sprint repair") {
+		needles := []string{"Harness Engineering", "sprint repair"}
+		if planningMode == PlanningSpecDriven {
+			needles = append(needles, "Spec-driven automation")
+		}
+		if fileContains(filepath.Join(root, ".cursor", "rules", "harness.mdc"), needles...) {
 			fmt.Println("  OK   Cursor rule includes repair protocol")
 		} else {
 			fmt.Println("  FAIL Cursor rule is missing or stale")

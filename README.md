@@ -17,13 +17,13 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.5
+npx github:dancampari/harness#v0.4.6
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
-the work, asks whether automated contract-authoring skills should be installed,
-asks whether the command should be project-only or global, runs `doctor`, and
-prints the command to open the live Harness terminal.
+the work, asks which planning automation mode should be installed, asks whether
+the command should be project-only or global, runs `doctor`, and prints the
+command to open the live Harness terminal.
 
 Interactive setup asks:
 
@@ -36,9 +36,10 @@ Which coding CLI will implement code in this repo?
   All three
   None
 
-Install automated contract-authoring skills?
-> Yes
-  No
+Planning automation mode:
+> Spec-driven automation
+  Contract automation only
+  Manual contracts
 
 Installation scope:
 > Project only
@@ -55,13 +56,16 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.5 --yes
-npx github:dancampari/harness#v0.4.5 --cli codex --yes
-npx github:dancampari/harness#v0.4.5 --cli claude --yes
-npx github:dancampari/harness#v0.4.5 --cli cursor --yes
-npx github:dancampari/harness#v0.4.5 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.4.5 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.4.6 --yes
+npx github:dancampari/harness#v0.4.6 --cli codex --yes
+npx github:dancampari/harness#v0.4.6 --cli claude --yes
+npx github:dancampari/harness#v0.4.6 --cli cursor --yes
+npx github:dancampari/harness#v0.4.6 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.4.6 --cli codex --planning manual --scope global --yes
 ```
+
+`--skills on|off` remains supported as a legacy alias. New installs should use
+`--planning spec-driven|contract|manual`.
 
 The package is also prepared for npm registry publishing as
 `@dancampari/harness`. After the npm package is published, the stable user
@@ -80,8 +84,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.5 --yes
-npx github:dancampari/harness#v0.4.5 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.6 --yes
+npx github:dancampari/harness#v0.4.6 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,21 +99,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.5 contract propose
-npx github:dancampari/harness#v0.4.5 contract approve --role planner
-npx github:dancampari/harness#v0.4.5 contract approve --role tester
+npx github:dancampari/harness#v0.4.6 contract propose
+npx github:dancampari/harness#v0.4.6 contract approve --role planner
+npx github:dancampari/harness#v0.4.6 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.5 sprint qa
-npx github:dancampari/harness#v0.4.5 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.5 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.4.5 sprint repair
-npx github:dancampari/harness#v0.4.5 sprint score
-npx github:dancampari/harness#v0.4.5 run --resume
+npx github:dancampari/harness#v0.4.6 sprint qa
+npx github:dancampari/harness#v0.4.6 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.6 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.4.6 sprint repair
+npx github:dancampari/harness#v0.4.6 sprint score
+npx github:dancampari/harness#v0.4.6 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -160,7 +164,22 @@ The generated `.harness/agent-protocol.md`, `AGENTS.md`, `CLAUDE.md`,
 to call these functions itself. `CLAUDE.md` is the Claude Code project memory;
 `.claude/settings.json` is used only for Claude Code hooks/settings.
 
-When automated contract skills are enabled, Harness also installs:
+When planning automation is enabled, Harness installs one of two skill levels.
+The default and recommended mode is spec-driven automation:
+
+```text
+.harness/skills/spec-driven/SKILL.md
+.harness/skills/spec-driven/references/
+.harness/context/
+.harness/design/
+.harness/tasks/
+```
+
+Spec-driven automation adapts the TLC-style Specify, Design, Tasks, Execute,
+Validate flow into Harness-native artifacts. It does not create `.specs/` by
+default; `.harness/` remains the source of truth.
+
+Contract-only automation installs the smaller author/reviewer pack:
 
 ```text
 .harness/skills/contract-authoring/SKILL.md
@@ -169,15 +188,18 @@ When automated contract skills are enabled, Harness also installs:
 ```
 
 The agent references instruct Codex, Claude Code, or Cursor to read that skill,
-break the user's prompt into a small sprint, call `harness sprint new`, and fill
-the contract Markdown automatically. A separate tester/reviewer role must then
-review the same contract hash before implementation. Harness remains the
-deterministic validator; the skills only guide agents toward viable contracts.
+break the user's prompt into a small sprint, call `harness sprint new`, fill the
+contract Markdown automatically, and route the exact hash through planner/tester
+agreement. In spec-driven mode, they may also create `.harness/design/` and
+`.harness/tasks/` artifacts when the sprint needs more planning depth. Harness
+remains the deterministic validator; the skills only guide agents toward viable
+contracts.
 
 When updating Harness in an existing project, rerun `harness install-hooks
---skills on` or `harness skills install --force` to refresh the generated skill
-documents. This does not overwrite contracts, reports, memory, screenshots, or
-progress history.
+--planning spec-driven` or `harness skills install --planning spec-driven
+--force` to refresh the generated skill documents. This does not overwrite
+contracts, reports, memory, screenshots, fixtures, approvals, or progress
+history.
 
 ```bash
 harness sprint status
@@ -215,6 +237,10 @@ Harness is Spec Driven:
 - `.harness/spec.md` is the project specification and persistent product bar.
 - `.harness/contracts/sprint-NNN.md` turns one user request into a small,
   testable sprint contract.
+- In spec-driven mode, agents use the Harness-native Specify, Design, Tasks,
+  Execute, Validate flow from `.harness/skills/spec-driven/SKILL.md`.
+- Optional planning depth lives under `.harness/context/`, `.harness/design/`,
+  and `.harness/tasks/`; Harness does not create `.specs/` by default.
 - `.harness/agent-protocol.md`, `AGENTS.md`, `CLAUDE.md`, and Cursor rules tell
   coding agents to create contracts, propose them, approve required roles, run
   QA, read findings, fix, and score.
@@ -234,8 +260,10 @@ The PBQ-style agreement gate is deterministic:
 
 For Codex installations, Harness also writes project-scoped custom agents:
 
+- `.codex/agents/harness-spec-planner.toml` in spec-driven mode;
 - `.codex/agents/harness-contract-author.toml`;
 - `.codex/agents/harness-contract-reviewer.toml`;
+- `.codex/agents/harness-task-worker.toml` in spec-driven mode;
 - `.codex/hooks.json` with a `PreToolUse` guard.
 
 The guard blocks `apply_patch`, `Edit`, `MultiEdit`, and `Write` against
@@ -354,7 +382,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Activity 1-6/12` and `Sprints 3-8/15`.
 
 ```text
-harness  Autonomous Development Pipeline   v0.4.5
+harness  Autonomous Development Pipeline   v0.4.6
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    98      2.5s    0
@@ -460,11 +488,25 @@ Harness creates this local directory:
   setup.json
   progress.md
   skills/
+    spec-driven/
+      SKILL.md
+      references/
     contract-authoring/
       SKILL.md
       references/
     contract-review/
       SKILL.md
+  context/
+    STACK.md
+    ARCHITECTURE.md
+    CONVENTIONS.md
+    TESTING.md
+    INTEGRATIONS.md
+    CONCERNS.md
+  design/
+    sprint-001.md
+  tasks/
+    sprint-001.md
   contracts/
     sprint-001.md
     sprint-001.lock.json
@@ -493,10 +535,10 @@ state and should stay local.
 
 ```text
 harness                         one-command setup
-harness setup [--yes] [--cli auto|codex|claude|cursor|all|none] [--skills auto|on|off] [--scope auto|project|global] [--start]
-harness init [--force] [--install-hooks] [--cli auto|codex|claude|cursor|all|none] [--skills on|off]
-harness install-hooks [--interactive] [--cli auto|codex|claude|cursor|all|none] [--skills auto|on|off]
-harness skills install [--force]
+harness setup [--yes] [--cli auto|codex|claude|cursor|all|none] [--planning auto|spec-driven|contract|manual] [--scope auto|project|global] [--start]
+harness init [--force] [--install-hooks] [--cli auto|codex|claude|cursor|all|none] [--planning auto|spec-driven|contract|manual]
+harness install-hooks [--interactive] [--cli auto|codex|claude|cursor|all|none] [--planning auto|spec-driven|contract|manual]
+harness skills install [--force] [--planning auto|spec-driven|contract|manual]
 harness skills status
 harness doctor [--strict]
 harness spec

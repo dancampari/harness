@@ -65,6 +65,23 @@
 - [x] Repair brief actions for missing or changed approved fixtures
 - [x] Human approval boundary for fixture baseline updates
 
+## v0.4.6 - Harness-Native Spec-Driven Skill Pack
+
+Reference plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
+
+- [x] Add setup planning modes: spec-driven, contract automation only, manual
+- [x] Preserve backward compatibility for `--skills on|off`
+- [x] Generate `.harness/skills/spec-driven/` with Specify, Design, Tasks, Execute, Validate references
+- [x] Map TLC-style project memory to `.harness/spec.md`, `.harness/progress.md`, and `.harness/context/*.md`
+- [x] Add optional `.harness/design/` and `.harness/tasks/` sprint artifacts
+- [x] Require requirement IDs and traceability in generated spec-driven instructions
+- [x] Update Codex agents for spec planner, contract reviewer, and task worker roles
+- [x] Update Claude Code subagents for spec planner, contract reviewer, and task worker roles
+- [x] Update Cursor rules for the spec-driven protocol and document enforcement limits
+- [x] Extend `doctor --strict` to detect missing or stale spec-driven skill artifacts
+- [x] Add tests for setup migration, skill generation, stale detection, and provider reference content
+- [ ] Validate end-to-end in `harness-demo` from prompt -> contract -> agreement -> implementation -> QA -> repair -> score
+
 ## v0.5 - Broader Stack Coverage
 
 - [ ] Python: ruff, mypy, pytest, pytest-cov, pip-audit

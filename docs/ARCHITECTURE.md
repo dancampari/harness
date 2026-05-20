@@ -15,6 +15,17 @@ goal, declared deliverables, acceptance criteria, and constraints under
 
 Code: `internal/sprint/sprint.go`, `internal/planner/contract.go`.
 
+The Harness-native spec-driven skill pack keeps this boundary while adding
+adaptive planning depth. The external TLC-style phases map into Harness
+artifacts instead of creating a second `.specs/` source of truth:
+
+- Specify -> `.harness/contracts/sprint-NNN.md`
+- Design -> `.harness/design/sprint-NNN.md` when architectural decisions exist
+- Tasks -> `.harness/tasks/sprint-NNN.md` when the sprint needs explicit atomic work items
+- Execute/Validate -> `harness sprint qa`, `harness sprint repair`, and `harness sprint score`
+
+Plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
+
 ### Divergent Agents
 
 Contracts move through a deterministic agreement gate before implementation.

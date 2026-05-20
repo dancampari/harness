@@ -18,6 +18,7 @@ func newInitCmd() *cobra.Command {
 	var cli string
 	var installHooks bool
 	var skills string
+	var planning string
 
 	cmd := &cobra.Command{
 		Use:   "init",
@@ -29,22 +30,34 @@ func newInitCmd() *cobra.Command {
   - contracts/, evaluations/, repairs/, screenshots/, reports/ (empty dirs)
   - memory.db (SQLite index, initialized)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			skillsMode := normalizeSkillsMode(skills)
-			if skillsMode != "on" && skillsMode != "off" {
-				return fmt.Errorf("unknown skills mode %q; use on|off", skills)
+			planningMode := normalizePlanningMode(planning)
+			if planningMode == PlanningAuto {
+				fromSkills, err := planningModeFromSkills(skills)
+				if err != nil {
+					return err
+				}
+				planningMode = fromSkills
+			}
+			if planningMode == PlanningAuto {
+				planningMode = PlanningManual
+			}
+			if planningMode != PlanningSpecDriven && planningMode != PlanningContract && planningMode != PlanningManual {
+				return fmt.Errorf("unknown planning mode %q; use auto|spec-driven|contract|manual", planning)
 			}
 			return runInit(initOptions{
 				Force:         force,
 				CLI:           cli,
 				InstallHooks:  installHooks,
-				InstallSkills: skillsMode == "on",
+				InstallSkills: planningUsesSkills(planningMode),
+				PlanningMode:  planningMode,
 			})
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing .harness/")
 	cmd.Flags().StringVar(&cli, "cli", "auto", "coding CLI to configure: auto|codex|claude|cursor|all|none")
-	cmd.Flags().StringVar(&skills, "skills", "off", "install contract automation skills: on|off")
+	cmd.Flags().StringVar(&planning, "planning", "auto", "planning automation: auto|spec-driven|contract|manual")
+	cmd.Flags().StringVar(&skills, "skills", "off", "legacy alias for planning: on|off")
 	cmd.Flags().BoolVar(&installHooks, "install-hooks", false, "install coding CLI references during init")
 	return cmd
 }
@@ -54,6 +67,7 @@ type initOptions struct {
 	CLI           string
 	InstallHooks  bool
 	InstallSkills bool
+	PlanningMode  string
 	Quiet         bool
 }
 
@@ -73,6 +87,13 @@ func runInit(opts initOptions) error {
 		filepath.Join(root, "screenshots"),
 		filepath.Join(root, "reports"),
 	}
+	if opts.PlanningMode == PlanningSpecDriven {
+		dirs = append(dirs,
+			filepath.Join(root, "context"),
+			filepath.Join(root, "design"),
+			filepath.Join(root, "tasks"),
+		)
+	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return fmt.Errorf("mkdir %s: %w", d, err)
@@ -91,11 +112,19 @@ func runInit(opts initOptions) error {
 	if err := writeTemplate(filepath.Join(root, "progress.md"), progressTemplate); err != nil {
 		return err
 	}
-	if err := writeTemplate(filepath.Join(root, "agent-protocol.md"), agentProtocolTemplate(harnessInvocation(), opts.InstallSkills)); err != nil {
+	planningMode := opts.PlanningMode
+	if planningMode == "" {
+		if opts.InstallSkills {
+			planningMode = PlanningSpecDriven
+		} else {
+			planningMode = PlanningManual
+		}
+	}
+	if err := writeTemplate(filepath.Join(root, "agent-protocol.md"), agentProtocolTemplate(harnessInvocation(), planningMode)); err != nil {
 		return err
 	}
 	if opts.InstallSkills {
-		if err := runInstallSkills(root); err != nil {
+		if err := runInstallSkillsWithMode(root, planningMode); err != nil {
 			return err
 		}
 	}
@@ -128,7 +157,8 @@ func runInit(opts initOptions) error {
 	if shouldInstallHooks {
 		if err := runInstallHooks(installHookOptions{
 			CLI:         opts.CLI,
-			Skills:      boolSkillsMode(opts.InstallSkills),
+			Skills:      boolSkillsModeForPlanning(planningMode),
+			Planning:    planningMode,
 			Interactive: isTerminal(os.Stdin) && opts.CLI == "auto",
 			InstallGit:  true,
 		}); err != nil {
@@ -212,8 +242,13 @@ in Git, and read by every CLI as the first source of truth when resuming work.
 <!-- harness append below -->
 `
 
-func agentProtocolTemplate(invoke string, skillsEnabled bool) string {
+func agentProtocolTemplate(invoke string, planningMode string) string {
+	planningMode = normalizePlanningMode(planningMode)
+	if planningMode == PlanningAuto {
+		planningMode = PlanningManual
+	}
 	return `# Harness Agent Protocol
+<!-- harness-agent-protocol-v4 planning:` + planningMode + ` -->
 
 This file is for Codex, Claude Code, Cursor, and any other coding CLI working
 in this repository.
@@ -238,7 +273,7 @@ Harness functions:
 | harness.doctor | ` + "`" + invoke + ` doctor` + "`" + ` | When a required sensor/tool is missing |
 | harness.terminal | ` + "`" + invoke + ` run --resume` + "`" + ` | When the user wants the live terminal dashboard |
 
-` + contractAutomationProtocol(skillsEnabled) + `
+` + planningAutomationProtocol(planningMode) + `
 
 Autonomy rules:
 

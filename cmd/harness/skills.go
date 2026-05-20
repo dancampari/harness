@@ -11,6 +11,7 @@ import (
 
 func newSkillsCmd() *cobra.Command {
 	var force bool
+	var planning string
 	cmd := &cobra.Command{
 		Use:   "skills",
 		Short: "Manage Harness agent skill documents",
@@ -20,10 +21,18 @@ func newSkillsCmd() *cobra.Command {
 		Short: "Install automated contract-authoring skills into .harness/",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInstallSkillsWithOptions(".harness", force)
+			mode := normalizePlanningMode(planning)
+			if mode == PlanningAuto {
+				mode = planningModeFromInstalled(".harness")
+				if mode == PlanningManual {
+					mode = PlanningSpecDriven
+				}
+			}
+			return runInstallSkillsWithOptions(".harness", force, mode)
 		},
 	}
 	installCmd.Flags().BoolVar(&force, "force", false, "refresh generated Harness skill documents if they already exist")
+	installCmd.Flags().StringVar(&planning, "planning", "auto", "planning automation: auto|spec-driven|contract|manual")
 	cmd.AddCommand(installCmd)
 	cmd.AddCommand(&cobra.Command{
 		Use:   "status",
@@ -35,6 +44,7 @@ func newSkillsCmd() *cobra.Command {
 			} else {
 				fmt.Println("Contract automation skills: not installed")
 			}
+			fmt.Println("Planning mode:", planningModeLabel(planningModeFromInstalled(".harness")))
 			return nil
 		},
 	})
@@ -42,20 +52,47 @@ func newSkillsCmd() *cobra.Command {
 }
 
 func runInstallSkills(root string) error {
-	return runInstallSkillsWithOptions(root, false)
+	return runInstallSkillsWithOptions(root, false, PlanningSpecDriven)
+}
+
+func runInstallSkillsWithMode(root, planningMode string) error {
+	return runInstallSkillsWithOptions(root, false, planningMode)
 }
 
 func refreshInstallSkills(root string) error {
-	return runInstallSkillsWithOptions(root, true)
+	mode := planningModeFromInstalled(root)
+	if mode == PlanningManual {
+		mode = PlanningSpecDriven
+	}
+	return runInstallSkillsWithOptions(root, true, mode)
 }
 
-func runInstallSkillsWithOptions(root string, force bool) error {
+func runInstallSkillsWithOptions(root string, force bool, planningMode string) error {
 	if root == "" {
 		root = ".harness"
+	}
+	planningMode = normalizePlanningMode(planningMode)
+	if planningMode == PlanningAuto {
+		planningMode = PlanningSpecDriven
+	}
+	if planningMode == PlanningManual {
+		if err := ensureAgentProtocolMode(root, PlanningManual); err != nil {
+			return err
+		}
+		fmt.Println("  OK planning skills disabled")
+		return nil
 	}
 	dirs := []string{
 		filepath.Join(root, "skills", "contract-authoring", "references"),
 		filepath.Join(root, "skills", "contract-review"),
+	}
+	if planningMode == PlanningSpecDriven {
+		dirs = append(dirs,
+			filepath.Join(root, "skills", "spec-driven", "references"),
+			filepath.Join(root, "context"),
+			filepath.Join(root, "design"),
+			filepath.Join(root, "tasks"),
+		)
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -69,6 +106,11 @@ func runInstallSkillsWithOptions(root string, force bool) error {
 		filepath.Join(root, "skills", "contract-authoring", "references", "acceptance-examples.md"): acceptanceExamplesReference,
 		filepath.Join(root, "skills", "contract-review", "SKILL.md"):                                contractReviewSkill,
 	}
+	if planningMode == PlanningSpecDriven {
+		for path, content := range specDrivenSkillFiles(root) {
+			files[path] = content
+		}
+	}
 	for path, content := range files {
 		if force {
 			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -80,8 +122,19 @@ func runInstallSkillsWithOptions(root string, force bool) error {
 			}
 		}
 	}
-	if err := ensureAgentProtocolMode(root, true); err != nil {
+	if planningMode == PlanningSpecDriven {
+		for path, content := range specDrivenContextTemplates(root) {
+			if err := writeTemplate(path, content); err != nil {
+				return err
+			}
+		}
+	}
+	if err := ensureAgentProtocolMode(root, planningMode); err != nil {
 		return err
+	}
+	if planningMode == PlanningSpecDriven {
+		fmt.Println("  OK spec-driven automation skills installed: .harness/skills/spec-driven, .harness/skills/contract-authoring, .harness/skills/contract-review")
+		return nil
 	}
 	fmt.Println("  OK contract automation skills installed: .harness/skills/contract-authoring, .harness/skills/contract-review")
 	return nil
@@ -105,20 +158,25 @@ func normalizeSkillsMode(value string) string {
 	return v
 }
 
-func ensureAgentProtocolMode(root string, skillsEnabled bool) error {
+func ensureAgentProtocolMode(root string, planningMode string) error {
 	path := filepath.Join(root, "agent-protocol.md")
-	content := agentProtocolTemplate(harnessInvocation(), skillsEnabled)
+	planningMode = normalizePlanningMode(planningMode)
+	if planningMode == PlanningAuto {
+		planningMode = PlanningSpecDriven
+	}
+	content := agentProtocolTemplate(harnessInvocation(), planningMode)
 	existing, err := os.ReadFile(path)
 	if err != nil {
 		return os.WriteFile(path, []byte(content), 0o644)
 	}
 	text := string(existing)
-	hasSkillRef := strings.Contains(text, ".harness/skills/contract-authoring/SKILL.md")
+	hasSkillRef := strings.Contains(text, ".harness/skills/contract-authoring/SKILL.md") ||
+		strings.Contains(text, ".harness/skills/spec-driven/SKILL.md")
 	isCurrent := agentProtocolIsCurrent(text)
-	if skillsEnabled && hasSkillRef && isCurrent {
+	if planningUsesSkills(planningMode) && hasSkillRef && isCurrent && protocolHasPlanningMode(text, planningMode) {
 		return nil
 	}
-	if !skillsEnabled && !hasSkillRef && isCurrent {
+	if !planningUsesSkills(planningMode) && !hasSkillRef && isCurrent {
 		return nil
 	}
 	if strings.Contains(text, "## Harness Agent Protocol") {
@@ -127,7 +185,7 @@ func ensureAgentProtocolMode(root string, skillsEnabled bool) error {
 	if strings.Contains(text, "# Harness Agent Protocol") {
 		return os.WriteFile(path, []byte(content), 0o644)
 	}
-	return os.WriteFile(path, []byte(strings.TrimSpace(text)+"\n\n"+contractAutomationProtocol(skillsEnabled)+"\n"), 0o644)
+	return os.WriteFile(path, []byte(strings.TrimSpace(text)+"\n\n"+planningAutomationProtocol(planningMode)+"\n"), 0o644)
 }
 
 func agentProtocolIsCurrent(text string) bool {
@@ -135,6 +193,22 @@ func agentProtocolIsCurrent(text string) bool {
 		strings.Contains(text, "sprint repair") &&
 		strings.Contains(text, ".harness/repairs/latest.md") &&
 		strings.Contains(text, "sprint score` only after QA")
+}
+
+func protocolHasPlanningMode(text, planningMode string) bool {
+	switch planningMode {
+	case PlanningSpecDriven:
+		return strings.Contains(text, ".harness/skills/spec-driven/SKILL.md") ||
+			strings.Contains(text, "Spec-driven automation is enabled")
+	case PlanningContract:
+		return strings.Contains(text, ".harness/skills/contract-authoring/SKILL.md") &&
+			!strings.Contains(text, ".harness/skills/spec-driven/SKILL.md")
+	case PlanningManual:
+		return strings.Contains(text, "Contract automation skills are disabled") ||
+			strings.Contains(text, "Planning automation is disabled")
+	default:
+		return true
+	}
 }
 
 const contractAuthoringSkill = `---
@@ -152,7 +226,7 @@ Use this skill before implementing a user request.
 2. Run: harness sprint status.
 3. Decide the smallest sprint that can produce visible, testable progress.
 4. Run: harness sprint new "<small goal>" when a new contract is needed.
-5. Fill the generated contract completely before implementation.
+5. Fill the generated contract completely before implementation. In spec-driven mode, follow .harness/skills/spec-driven/SKILL.md first.
 6. Keep the contract honest: do not remove important acceptance criteria to make QA pass.
 7. Run: harness contract propose.
 8. Approve the planner role only when the contract is complete: harness contract approve --role planner.
@@ -172,6 +246,7 @@ Use this skill before implementing a user request.
 - Goal is one small outcome, not a whole product.
 - Deliverables name concrete files, routes, commands, schemas, or exported symbols.
 - Acceptance criteria are observable and testable by sensors or direct inspection.
+- Acceptance criteria reference requirement IDs such as REQ-001 when spec-driven mode is enabled.
 - Constraints include architecture boundaries, forbidden imports, complexity limits, security rules, or visual requirements when relevant.
 - Behavior-sensitive work includes approved fixtures under .harness/fixtures when exact inputs/outputs matter.
 - Ambiguities are recorded as assumptions only when they do not change product intent.
@@ -181,6 +256,7 @@ Use this skill before implementing a user request.
 - Sprint sizing: references/sprint-planning.md
 - Contract quality checklist: references/contract-quality.md
 - Examples of weak and strong criteria: references/acceptance-examples.md
+- Full spec-driven planning: ../spec-driven/SKILL.md when installed
 `
 
 const contractReviewSkill = `---

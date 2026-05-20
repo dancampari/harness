@@ -18,6 +18,7 @@ import (
 type setupOptions struct {
 	CLI      string
 	Skills   string
+	Planning string
 	Scope    string
 	Force    bool
 	Yes      bool
@@ -25,9 +26,10 @@ type setupOptions struct {
 }
 
 type setupChoices struct {
-	CLI    string
-	Skills bool
-	Scope  string
+	CLI      string
+	Planning string
+	Skills   bool
+	Scope    string
 }
 
 func newSetupCmd(version string) *cobra.Command {
@@ -39,15 +41,16 @@ func newSetupCmd(version string) *cobra.Command {
 and prints the command to open the live terminal dashboard.
 
 If no coding CLI marker is detected and the command is running in a terminal,
-Harness asks for the coding CLI, contract automation skills, and install
-scope. In non-interactive mode, use --yes or explicit flags.`,
+Harness asks for the coding CLI, planning automation mode, and install scope.
+In non-interactive mode, use --yes or explicit flags.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetup(opts, version)
 		},
 	}
 	cmd.Flags().StringVar(&opts.CLI, "cli", "auto", "coding CLI to configure: auto|codex|claude|cursor|all|none")
-	cmd.Flags().StringVar(&opts.Skills, "skills", "auto", "contract automation skills: auto|on|off")
+	cmd.Flags().StringVar(&opts.Planning, "planning", "auto", "planning automation: auto|spec-driven|contract|manual")
+	cmd.Flags().StringVar(&opts.Skills, "skills", "auto", "legacy alias for planning: auto|on|off")
 	cmd.Flags().StringVar(&opts.Scope, "scope", "auto", "install scope: auto|project|global")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "overwrite existing .harness/")
 	cmd.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "run setup with no prompts; installs all agent references if none are detected")
@@ -61,6 +64,9 @@ func runSetup(opts setupOptions, version string) error {
 	}
 	if opts.Skills == "" {
 		opts.Skills = "auto"
+	}
+	if opts.Planning == "" {
+		opts.Planning = "auto"
 	}
 	if opts.Scope == "" {
 		opts.Scope = "auto"
@@ -84,6 +90,7 @@ func runSetup(opts setupOptions, version string) error {
 			CLI:           "auto",
 			InstallHooks:  false,
 			InstallSkills: choices.Skills,
+			PlanningMode:  choices.Planning,
 			Quiet:         true,
 		}); err != nil {
 			return err
@@ -95,7 +102,8 @@ func runSetup(opts setupOptions, version string) error {
 
 	if err := runInstallHooks(installHookOptions{
 		CLI:         choices.CLI,
-		Skills:      boolSkillsMode(choices.Skills),
+		Skills:      boolSkillsModeForPlanning(choices.Planning),
+		Planning:    choices.Planning,
 		Interactive: false,
 		InstallGit:  true,
 	}); err != nil {
@@ -119,7 +127,8 @@ func runSetup(opts setupOptions, version string) error {
 	fmt.Println()
 	fmt.Println("Ready.")
 	fmt.Printf("  CLI references:             %s\n", choices.CLI)
-	fmt.Printf("  Contract skills:            %s\n", enabledText(choices.Skills))
+	fmt.Printf("  Planning mode:              %s\n", planningModeLabel(choices.Planning))
+	fmt.Printf("  Agent skills:               %s\n", enabledText(choices.Skills))
 	fmt.Printf("  Install scope:              %s\n", choices.Scope)
 	fmt.Printf("  Project command:            %s\n", harnessInvocation())
 	fmt.Printf("  Open the Harness terminal: %s run --resume\n", invoke)
@@ -142,7 +151,7 @@ func setupWizard(opts setupOptions, project detect.ProjectInfo) (setupChoices, e
 	if err != nil {
 		return setupChoices{}, err
 	}
-	skills, err := setupSkills(opts, interactive)
+	planning, err := setupPlanning(opts, interactive)
 	if err != nil {
 		return setupChoices{}, err
 	}
@@ -150,7 +159,12 @@ func setupWizard(opts setupOptions, project detect.ProjectInfo) (setupChoices, e
 	if err != nil {
 		return setupChoices{}, err
 	}
-	return setupChoices{CLI: cli, Skills: skills, Scope: scope}, nil
+	return setupChoices{
+		CLI:      cli,
+		Planning: planning,
+		Skills:   planningUsesSkills(planning),
+		Scope:    scope,
+	}, nil
 }
 
 func setupCLI(opts setupOptions, project detect.ProjectInfo, interactive bool) (string, error) {
@@ -184,20 +198,34 @@ func setupCLI(opts setupOptions, project detect.ProjectInfo, interactive bool) (
 	}
 }
 
-func setupSkills(opts setupOptions, interactive bool) (bool, error) {
-	switch normalizeSkillsMode(opts.Skills) {
-	case "auto":
-		if interactive {
-			return promptYesNo("Install automated contract-authoring skills?", true)
+func setupPlanning(opts setupOptions, interactive bool) (string, error) {
+	planning := normalizePlanningMode(opts.Planning)
+	switch planning {
+	case PlanningSpecDriven, PlanningContract, PlanningManual:
+		return planning, nil
+	case PlanningAuto:
+		fromSkills, err := planningModeFromSkills(opts.Skills)
+		if err != nil {
+			return "", err
 		}
-		return true, nil
-	case "on":
-		return true, nil
-	case "off":
-		return false, nil
+		if fromSkills != PlanningAuto {
+			return fromSkills, nil
+		}
+		if interactive {
+			return promptPlanningMode()
+		}
+		return PlanningSpecDriven, nil
 	default:
-		return false, fmt.Errorf("unknown skills mode %q; use auto|on|off", opts.Skills)
+		return "", fmt.Errorf("unknown planning mode %q; use auto|spec-driven|contract|manual", opts.Planning)
 	}
+}
+
+func promptPlanningMode() (string, error) {
+	return promptSelect("Planning automation mode", []promptOption{
+		{Label: "Spec-driven automation", Description: "Full Specify, Design, Tasks, Execute, Validate skill pack", Value: PlanningSpecDriven},
+		{Label: "Contract automation only", Description: "Generate only contract author/reviewer skills", Value: PlanningContract},
+		{Label: "Manual contracts", Description: "Keep Harness manual; no agent planning skills", Value: PlanningManual},
+	}, 0)
 }
 
 func setupScope(opts setupOptions, interactive bool) (string, error) {
@@ -276,6 +304,7 @@ func writeSetupState(choices setupChoices, project detect.ProjectInfo) error {
 		"project":                 valueOr(project.Name, "unknown"),
 		"stack":                   valueOr(project.Stack, "unknown"),
 		"coding_cli":              choices.CLI,
+		"planning_mode":           choices.Planning,
 		"contract_skills_enabled": choices.Skills,
 		"install_scope":           choices.Scope,
 	}

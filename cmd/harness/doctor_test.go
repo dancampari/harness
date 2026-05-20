@@ -47,6 +47,35 @@ func TestDoctorStrictFailsOnStaleInstalledSkills(t *testing.T) {
 	}
 }
 
+func TestDoctorStrictPassesSpecDrivenPlanningArtifacts(t *testing.T) {
+	root := t.TempDir()
+	harnessDir := filepath.Join(root, ".harness")
+	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
+	writeDoctorFile(t, root, ".harness/.gitignore", "memory.db\nreports/\nrepairs/\nscreenshots/\n")
+	writeDoctorFile(t, root, ".harness/setup.json", `{"planning_mode":"spec-driven","contract_skills_enabled":true,"coding_cli":"none"}`)
+	if err := runInstallSkillsWithOptions(harnessDir, false, PlanningSpecDriven); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runDoctorWithOptions(root, doctorOptions{Strict: true}); err != nil {
+		t.Fatalf("expected spec-driven doctor to pass, got %v", err)
+	}
+}
+
+func TestDoctorStrictFailsOnStaleSpecDrivenSkill(t *testing.T) {
+	root := t.TempDir()
+	writeDoctorHarnessConfig(t, root, config.DefaultFor("unknown"))
+	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
+	writeDoctorFile(t, root, ".harness/.gitignore", "memory.db\nreports/\nrepairs/\nscreenshots/\n")
+	writeDoctorFile(t, root, ".harness/setup.json", `{"planning_mode":"spec-driven","contract_skills_enabled":true,"coding_cli":"none"}`)
+	writeDoctorFile(t, root, ".harness/skills/spec-driven/SKILL.md", "old skill\n")
+
+	err := runDoctorWithOptions(root, doctorOptions{Strict: true})
+	if err == nil || !strings.Contains(err.Error(), "doctor strict failed") {
+		t.Fatalf("expected stale spec-driven skill to fail strict doctor, got %v", err)
+	}
+}
+
 func writeDoctorHarnessConfig(t *testing.T, root string, cfg config.Config) {
 	t.Helper()
 	path := filepath.Join(root, ".harness", "config.yaml")

@@ -20,7 +20,8 @@ func Execute(version string) error {
 	}
 
 	root.Flags().StringVar(&setup.CLI, "cli", "auto", "coding CLI to configure: auto|codex|claude|cursor|all|none")
-	root.Flags().StringVar(&setup.Skills, "skills", "auto", "contract automation skills: auto|on|off")
+	root.Flags().StringVar(&setup.Planning, "planning", "auto", "planning automation: auto|spec-driven|contract|manual")
+	root.Flags().StringVar(&setup.Skills, "skills", "auto", "legacy alias for planning: auto|on|off")
 	root.Flags().StringVar(&setup.Scope, "scope", "auto", "install scope: auto|project|global")
 	root.Flags().BoolVar(&setup.Force, "force", false, "overwrite existing .harness/")
 	root.Flags().BoolVarP(&setup.Yes, "yes", "y", false, "run setup with no prompts; installs all agent references if none are detected")
@@ -59,7 +60,7 @@ the live terminal dashboard.
 
 Workflow:
   harness                         # one-command setup
-  harness --skills on             # setup with automated contract-authoring skills
+  harness --planning spec-driven  # setup with full spec-driven automation
   harness sprint new "<goal>"     # creates contracts/sprint-NNN.md template
   harness contract propose        # proposes the contract hash for agreement
   harness contract approve --role planner

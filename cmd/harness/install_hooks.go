@@ -14,6 +14,7 @@ import (
 type installHookOptions struct {
 	CLI         string
 	Skills      string
+	Planning    string
 	Interactive bool
 	InstallGit  bool
 }
@@ -22,6 +23,7 @@ func newInstallHooksCmd() *cobra.Command {
 	var only string
 	var cli string
 	var skills string
+	var planning string
 	var interactive bool
 	var git bool
 
@@ -43,6 +45,7 @@ a guided install, or --cli codex|claude|cursor|all|none in scripts.`,
 			return runInstallHooks(installHookOptions{
 				CLI:         cli,
 				Skills:      skills,
+				Planning:    planning,
 				Interactive: interactive,
 				InstallGit:  git,
 			})
@@ -50,7 +53,8 @@ a guided install, or --cli codex|claude|cursor|all|none in scripts.`,
 	}
 	cmd.Flags().StringVar(&only, "only", "", "deprecated: install only one: claude|codex|cursor|git")
 	cmd.Flags().StringVar(&cli, "cli", "auto", "coding CLI: auto|codex|claude|cursor|all|none")
-	cmd.Flags().StringVar(&skills, "skills", "auto", "contract automation skills: auto|on|off")
+	cmd.Flags().StringVar(&planning, "planning", "auto", "planning automation: auto|spec-driven|contract|manual")
+	cmd.Flags().StringVar(&skills, "skills", "auto", "legacy alias for planning: auto|on|off")
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "ask which coding CLI to configure")
 	cmd.Flags().BoolVar(&git, "git", true, "also install the git pre-push safety hook")
 	return cmd
@@ -70,34 +74,34 @@ func runInstallHooks(opts installHookOptions) error {
 	if err != nil {
 		return err
 	}
-	skillsEnabled, err := resolveHookSkills(opts.Skills)
+	planningMode, err := resolveHookPlanning(opts.Planning, opts.Skills)
 	if err != nil {
 		return err
 	}
-	if skillsEnabled {
+	if planningUsesSkills(planningMode) {
 		if !skillsInstalled(".harness") {
-			if err := runInstallSkills(".harness"); err != nil {
+			if err := runInstallSkillsWithMode(".harness", planningMode); err != nil {
 				return err
 			}
 		} else {
-			if err := refreshInstallSkills(".harness"); err != nil {
+			if err := runInstallSkillsWithOptions(".harness", true, planningMode); err != nil {
 				return err
 			}
 		}
 	} else if _, err := os.Stat(".harness"); err == nil {
-		if err := ensureAgentProtocolMode(".harness", false); err != nil {
+		if err := ensureAgentProtocolMode(".harness", PlanningManual); err != nil {
 			return err
 		}
 	}
 
-	installers := map[string]func(bool) error{
+	installers := map[string]func(string) error{
 		"claude": installClaudeHooks,
 		"codex":  installCodexHooks,
 		"cursor": installCursorHooks,
 	}
 	for _, target := range targets {
 		fn := installers[target]
-		if err := fn(skillsEnabled); err != nil {
+		if err := fn(planningMode); err != nil {
 			return fmt.Errorf("%s: %w", target, err)
 		}
 	}
@@ -112,16 +116,28 @@ func runInstallHooks(opts installHookOptions) error {
 	return nil
 }
 
-func resolveHookSkills(mode string) (bool, error) {
-	switch normalizeSkillsMode(mode) {
-	case "auto":
-		return skillsInstalled(".harness"), nil
-	case "on":
-		return true, nil
-	case "off":
-		return false, nil
+func resolveHookPlanning(planning, skills string) (string, error) {
+	mode := normalizePlanningMode(planning)
+	switch mode {
+	case PlanningSpecDriven, PlanningContract, PlanningManual:
+		return mode, nil
+	case PlanningAuto:
+		fromSkills, err := planningModeFromSkills(skills)
+		if err != nil {
+			return "", err
+		}
+		if fromSkills != PlanningAuto {
+			return fromSkills, nil
+		}
+		if _, err := os.Stat(".harness"); err == nil {
+			if state := readSetupState(filepath.Join(".harness", "setup.json")); state.PlanningMode != "" {
+				return state.PlanningMode, nil
+			}
+			return planningModeFromInstalled(".harness"), nil
+		}
+		return PlanningManual, nil
 	default:
-		return false, fmt.Errorf("unknown skills mode %q; use auto|on|off", mode)
+		return "", fmt.Errorf("unknown planning mode %q; use auto|spec-driven|contract|manual", planning)
 	}
 }
 
@@ -211,12 +227,12 @@ func promptHookTarget(project detect.ProjectInfo) (string, error) {
 	}, 3)
 }
 
-func installClaudeHooks(skillsEnabled bool) error {
-	if err := installClaudeMemory(skillsEnabled); err != nil {
+func installClaudeHooks(planningMode string) error {
+	if err := installClaudeMemory(planningMode); err != nil {
 		return err
 	}
-	if skillsEnabled {
-		if err := installClaudeAgents(); err != nil {
+	if planningUsesSkills(planningMode) {
+		if err := installClaudeAgents(planningMode); err != nil {
 			return err
 		}
 	}
@@ -249,7 +265,7 @@ func installClaudeHooks(skillsEnabled bool) error {
 	return nil
 }
 
-func installClaudeAgents() error {
+func installClaudeAgents(planningMode string) error {
 	dir := filepath.Join(".claude", "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -257,6 +273,10 @@ func installClaudeAgents() error {
 	files := map[string]string{
 		filepath.Join(dir, "harness-contract-author.md"):   claudeContractAuthorAgent,
 		filepath.Join(dir, "harness-contract-reviewer.md"): claudeContractReviewerAgent,
+	}
+	if planningMode == PlanningSpecDriven {
+		files[filepath.Join(dir, "harness-spec-planner.md")] = claudeSpecPlannerAgent
+		files[filepath.Join(dir, "harness-task-worker.md")] = claudeTaskWorkerAgent
 	}
 	for path, content := range files {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -266,9 +286,9 @@ func installClaudeAgents() error {
 	return nil
 }
 
-func installClaudeMemory(skillsEnabled bool) error {
+func installClaudeMemory(planningMode string) error {
 	path := "CLAUDE.md"
-	content := claudeMemory(harnessInvocation(), skillsEnabled)
+	content := claudeMemory(harnessInvocation(), planningMode)
 	if existing, err := os.ReadFile(path); err == nil {
 		text := string(existing)
 		if strings.Contains(text, "## Harness Gate") {
@@ -320,9 +340,9 @@ func appendClaudeHook(hooks map[string]any, event, matcher, command string) {
 	})
 }
 
-func installCodexHooks(skillsEnabled bool) error {
+func installCodexHooks(planningMode string) error {
 	path := "AGENTS.md"
-	addendum := codexAddendum(harnessInvocation(), skillsEnabled)
+	addendum := codexAddendum(harnessInvocation(), planningMode)
 	if existing, err := os.ReadFile(path); err == nil {
 		text := string(existing)
 		if strings.Contains(text, "## Harness Gate") {
@@ -337,8 +357,8 @@ func installCodexHooks(skillsEnabled bool) error {
 	if err := installCodexHookConfig(); err != nil {
 		return err
 	}
-	if skillsEnabled {
-		if err := installCodexAgents(); err != nil {
+	if planningUsesSkills(planningMode) {
+		if err := installCodexAgents(planningMode); err != nil {
 			return err
 		}
 	}
@@ -401,7 +421,7 @@ func appendCodexHook(hooks map[string]any, event, matcher, command string) {
 	})
 }
 
-func installCodexAgents() error {
+func installCodexAgents(planningMode string) error {
 	dir := filepath.Join(".codex", "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -409,6 +429,10 @@ func installCodexAgents() error {
 	files := map[string]string{
 		filepath.Join(dir, "harness-contract-author.toml"):   codexContractAuthorAgent,
 		filepath.Join(dir, "harness-contract-reviewer.toml"): codexContractReviewerAgent,
+	}
+	if planningMode == PlanningSpecDriven {
+		files[filepath.Join(dir, "harness-spec-planner.toml")] = codexSpecPlannerAgent
+		files[filepath.Join(dir, "harness-task-worker.toml")] = codexTaskWorkerAgent
 	}
 	for path, content := range files {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -441,13 +465,13 @@ func replaceMarkdownSection(source, heading, replacement string) string {
 	return strings.TrimSpace(source[:start]) + "\n\n" + replacement + "\n\n" + strings.TrimSpace(source[end:])
 }
 
-func installCursorHooks(skillsEnabled bool) error {
+func installCursorHooks(planningMode string) error {
 	dir := filepath.Join(".cursor", "rules")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	path := filepath.Join(dir, "harness.mdc")
-	if err := os.WriteFile(path, []byte(cursorRule(harnessInvocation(), skillsEnabled)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(cursorRule(harnessInvocation(), planningMode)), 0o644); err != nil {
 		return err
 	}
 	fmt.Println("  OK Cursor references installed:", path)
@@ -499,9 +523,10 @@ func isNpxHarnessInvocation(value string) bool {
 		strings.HasPrefix(value, "npx @dancampari/harness")
 }
 
-func codexAddendum(invoke string, skillsEnabled bool) string {
+func codexAddendum(invoke string, planningMode string) string {
+	planningMode = normalizePlanningMode(planningMode)
 	return `## Harness Gate
-<!-- harness-agent-protocol-v3 -->
+<!-- harness-agent-protocol-v4 planning:` + planningMode + ` -->
 
 This project uses Harness Engineering. You MUST call Harness functions
 autonomously through the CLI commands below. Do not ask the user to run Harness
@@ -521,7 +546,7 @@ Harness function calls:
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
 
-` + contractAutomationProtocol(skillsEnabled) + `
+` + planningAutomationProtocol(planningMode) + `
 
 Autonomous protocol:
 
@@ -534,10 +559,11 @@ Autonomous protocol:
    - Deliverables (files + symbols expected)
    - Acceptance Criteria (with thresholds 1-10)
    - Constraints (forbidden imports, complexity limits)
-6. If Codex custom agents are available, delegate contract creation/repair to
-   harness_contract_author and delegate independent review to
-   harness_contract_reviewer. If a subagent rejects the contract, do not edit
-   product files; route back to harness_contract_author until tester approves.
+6. If Codex custom agents are available and spec-driven automation is enabled,
+   delegate Specify/Design/Tasks to harness_spec_planner, delegate independent
+   review to harness_contract_reviewer, and delegate implementation only after
+   agreement to harness_task_worker. In contract-only mode, use
+   harness_contract_author and harness_contract_reviewer.
 7. Run ` + "`" + invoke + ` contract propose` + "`" + ` and wait until ` + "`" + invoke + ` contract status` + "`" + `
    returns AGREED. Planner and tester roles must approve the same hash.
 8. Implement the feature only after agreement. If status is DRAFT, PROPOSED,
@@ -561,9 +587,10 @@ Never declare a task done without a passing, non-stale QA verdict from Harness.
 `
 }
 
-func claudeMemory(invoke string, skillsEnabled bool) string {
+func claudeMemory(invoke string, planningMode string) string {
+	planningMode = normalizePlanningMode(planningMode)
 	return `## Harness Gate
-<!-- harness-claude-protocol-v3 -->
+<!-- harness-claude-protocol-v4 planning:` + planningMode + ` -->
 
 Claude Code MUST call Harness functions autonomously through the CLI commands
 below. Do not ask the user to run Harness for normal QA, status, score, or
@@ -583,7 +610,7 @@ Harness function calls:
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
 
-` + contractAutomationProtocol(skillsEnabled) + `
+` + planningAutomationProtocol(planningMode) + `
 
 Autonomous protocol for Claude Code:
 
@@ -607,7 +634,8 @@ baseline approval via ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + 
 `
 }
 
-func cursorRule(invoke string, skillsEnabled bool) string {
+func cursorRule(invoke string, planningMode string) string {
+	planningMode = normalizePlanningMode(planningMode)
 	return `---
 description: Harness Engineering integration
 alwaysApply: true
@@ -618,7 +646,7 @@ This project uses Harness Engineering. Always:
 1. On session start, read .harness/progress.md and .harness/spec.md.
 2. Read .harness/agent-protocol.md. It defines the Harness functions you must
    call autonomously through CLI commands.
-` + cursorContractAutomationProtocol(skillsEnabled) + `
+` + cursorPlanningAutomationProtocol(planningMode) + `
 4. Before implementing a feature, ensure a contract exists at
    .harness/contracts/sprint-NNN.md. If not, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
    and fill it in.
@@ -635,8 +663,41 @@ Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajecto
 `
 }
 
-func contractAutomationProtocol(enabled bool) string {
-	if enabled {
+func planningAutomationProtocol(mode string) string {
+	switch normalizePlanningMode(mode) {
+	case PlanningSpecDriven:
+		return `Spec-driven automation is enabled.
+
+Before creating or editing a sprint contract, read:
+
+- .harness/skills/spec-driven/SKILL.md
+- .harness/skills/contract-authoring/SKILL.md
+- .harness/skills/contract-review/SKILL.md
+
+Use the Harness-native Specify -> Design -> Tasks -> Execute -> Validate flow:
+
+1. Specify the user's request as the smallest useful sprint contract under
+   .harness/contracts/sprint-NNN.md.
+2. Create .harness/design/sprint-NNN.md only when architecture, data model,
+   security, or integration choices need an explicit decision record.
+3. Create .harness/tasks/sprint-NNN.md when the work needs atomic task tracking.
+4. Propose the contract hash and route it through planner/tester agreement.
+5. Implement only after AGREED.
+6. Validate with Harness QA, repair failures, and score only after PASS.
+
+When running in Codex and .codex/agents exists, use:
+- harness_spec_planner for Specify, Design, Tasks, and contract repair.
+- harness_contract_reviewer for independent tester approval or rejection.
+- harness_task_worker for implementation after the contract is AGREED.
+
+When running in Claude Code and .claude/agents exists, use:
+- harness-spec-planner for Specify, Design, Tasks, and contract repair.
+- harness-contract-reviewer for independent tester approval or rejection.
+- harness-task-worker for implementation after the contract is AGREED.
+
+Do not create a parallel .specs/ tree unless the user explicitly asks for an
+export. Harness-native artifacts under .harness/ are the source of truth.`
+	case PlanningContract:
 		return `Contract automation skills are enabled.
 
 Before creating or editing a sprint contract, read:
@@ -660,25 +721,48 @@ Do not ask the user to write the contract by hand. Ask only the smallest
 product question when the request is too ambiguous to make objective acceptance
 criteria. If the reviewer rejects the contract, fix the contract first; product
 files must remain untouched until contract status is AGREED.`
-	}
-	return `Contract automation skills are disabled.
+	default:
+		return `Planning automation is disabled.
 
 Use Harness for QA, scoring, status, and reports, but do not invent detailed
 contracts from the user's prompt unless the user explicitly asks for that. In
 manual mode, create the template when needed and let the user author or approve
 the contract.`
+	}
 }
 
-func cursorContractAutomationProtocol(enabled bool) string {
+func contractAutomationProtocol(enabled bool) string {
 	if enabled {
+		return planningAutomationProtocol(PlanningContract)
+	}
+	return planningAutomationProtocol(PlanningManual)
+}
+
+func cursorPlanningAutomationProtocol(mode string) string {
+	switch normalizePlanningMode(mode) {
+	case PlanningSpecDriven:
+		return `3. Spec-driven automation is enabled. Before creating or editing a
+   sprint contract, read .harness/skills/spec-driven/SKILL.md and
+   .harness/skills/contract-review/SKILL.md. Use the Harness-native
+   Specify -> Design -> Tasks -> Execute -> Validate flow, but keep .harness/
+   as the only source of truth.
+`
+	case PlanningContract:
 		return `3. Contract automation skills are enabled. Before creating or editing a
    sprint contract, read .harness/skills/contract-authoring/SKILL.md. Use it to
    decompose the user's prompt and fill the contract automatically.
 `
 	}
-	return `3. Contract automation skills are disabled. Do not invent detailed sprint
+	return `3. Planning automation is disabled. Do not invent detailed sprint
    contracts unless the user explicitly asks for automation.
 `
+}
+
+func cursorContractAutomationProtocol(enabled bool) string {
+	if enabled {
+		return cursorPlanningAutomationProtocol(PlanningContract)
+	}
+	return cursorPlanningAutomationProtocol(PlanningManual)
 }
 
 const codexContractAuthorAgent = `name = "harness_contract_author"
@@ -722,6 +806,48 @@ Rules:
 - Approve only if the contract is small, objective, testable, and aligned with the product spec: harness contract approve --role tester.
 - Never approve a contract that lowers criteria just to make QA easy.
 - Never implement code.
+"""
+`
+
+const codexSpecPlannerAgent = `name = "harness_spec_planner"
+description = "MUST BE USED in spec-driven Harness projects before implementation. Performs Specify, optional Design, optional Tasks, and writes/repairs Harness-native sprint planning artifacts only."
+sandbox_mode = "workspace-write"
+
+developer_instructions = """
+You are the Harness spec-driven planner.
+
+Your job is to transform the user's request into Harness-native planning artifacts before implementation.
+
+Rules:
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/spec-driven/SKILL.md.
+- Do not edit product/application files.
+- Edit only .harness/contracts/sprint-NNN.md, .harness/design/sprint-NNN.md, .harness/tasks/sprint-NNN.md, .harness/context/*.md, and .harness/progress.md when useful.
+- Keep .harness/ as the source of truth. Do not create .specs/ unless the user explicitly asks for export compatibility.
+- Create the smallest useful sprint contract with requirement IDs, deliverables, acceptance criteria, constraints, and verification evidence.
+- Add .harness/design/sprint-NNN.md only when the sprint has architecture, data model, integration, or security decisions.
+- Add .harness/tasks/sprint-NNN.md when the work needs atomic task tracking.
+- Run harness contract propose after writing or repairing the contract.
+- Approve only the planner role when the contract is complete: harness contract approve --role planner.
+- If tester rejects the contract, repair planning artifacts first, propose the new hash, and approve planner again.
+- Never implement before harness contract status returns AGREED.
+"""
+`
+
+const codexTaskWorkerAgent = `name = "harness_task_worker"
+description = "Use after a Harness sprint contract is AGREED to implement one atomic task and rerun Harness QA/repair until PASS."
+sandbox_mode = "workspace-write"
+
+developer_instructions = """
+You are the Harness task worker.
+
+Rules:
+- Before editing product files, run harness contract status and confirm the current sprint is AGREED.
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, the current contract, and .harness/tasks/sprint-NNN.md if present.
+- Implement only the current agreed sprint and preferably one atomic task at a time.
+- Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness_spec_planner.
+- After meaningful changes, run harness sprint qa --format=json.
+- If QA fails, run harness sprint repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
+- Run harness sprint score only after QA is PASS.
 """
 `
 
@@ -769,4 +895,46 @@ Rules:
 - Approve only if the contract is small, objective, testable, and aligned with the product spec: harness contract approve --role tester.
 - Never approve a contract that lowers criteria just to make QA easy.
 - Never implement code.
+`
+
+const claudeSpecPlannerAgent = `---
+name: harness-spec-planner
+description: MUST BE USED in spec-driven Harness projects before implementation. Performs Specify, optional Design, optional Tasks, and writes/repairs Harness-native sprint planning artifacts only.
+tools: Read, Grep, Glob, Bash, Edit, Write
+model: inherit
+---
+
+You are the Harness spec-driven planner.
+
+Rules:
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/spec-driven/SKILL.md.
+- Do not edit product/application files.
+- Edit only .harness/contracts/sprint-NNN.md, .harness/design/sprint-NNN.md, .harness/tasks/sprint-NNN.md, .harness/context/*.md, and .harness/progress.md when useful.
+- Keep .harness/ as the source of truth. Do not create .specs/ unless the user explicitly asks for export compatibility.
+- Create the smallest useful sprint contract with requirement IDs, deliverables, acceptance criteria, constraints, and verification evidence.
+- Add .harness/design/sprint-NNN.md only when the sprint has architecture, data model, integration, or security decisions.
+- Add .harness/tasks/sprint-NNN.md when the work needs atomic task tracking.
+- Run harness contract propose after writing or repairing the contract.
+- Approve only the planner role when the contract is complete: harness contract approve --role planner.
+- If tester rejects the contract, repair planning artifacts first, propose the new hash, and approve planner again.
+- Never implement before harness contract status returns AGREED.
+`
+
+const claudeTaskWorkerAgent = `---
+name: harness-task-worker
+description: Use after a Harness sprint contract is AGREED to implement one atomic task and rerun Harness QA/repair until PASS.
+tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write
+model: inherit
+---
+
+You are the Harness task worker.
+
+Rules:
+- Before editing product files, run harness contract status and confirm the current sprint is AGREED.
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, the current contract, and .harness/tasks/sprint-NNN.md if present.
+- Implement only the current agreed sprint and preferably one atomic task at a time.
+- Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness-spec-planner.
+- After meaningful changes, run harness sprint qa --format=json.
+- If QA fails, run harness sprint repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
+- Run harness sprint score only after QA is PASS.
 `
