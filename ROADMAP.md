@@ -31,6 +31,7 @@
 - [x] `harness doctor`
 - [x] npx package wrapper and install docs
 - [x] Interactive setup choices for CLI, contract skills, and install scope
+- [x] Arrow-key setup prompts with Enter confirmation
 - [x] Agent contract-authoring skill pack in `.harness/skills/`
 - [x] CI smoke test for vet, tests, build, npm pack, and npm exec
 

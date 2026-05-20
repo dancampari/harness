@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.3.8
+npx github:dancampari/harness#v0.3.9
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -29,20 +29,22 @@ Interactive setup asks:
 
 ```text
 Which coding CLI will implement code in this repo?
-  1) Claude Code
-  2) Codex
-  3) Cursor IDE
-  4) Auto / all references
-  5) All three
-  6) None
+> Claude Code
+  Codex
+  Cursor IDE
+  Auto / all references
+  All three
+  None
 
 Install automated contract-authoring skills?
-  1) Yes
-  2) No
+> Yes
+  No
 
 Installation scope:
-  1) Project only
-  2) Global command + this project
+> Project only
+  Global command + this project
+
+Use Up/Down arrows and Enter to select. Esc cancels.
 ```
 
 Global scope copies the resolved Harness binary into the npm global command
@@ -53,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.8 --yes
-npx github:dancampari/harness#v0.3.8 --cli codex --yes
-npx github:dancampari/harness#v0.3.8 --cli claude --yes
-npx github:dancampari/harness#v0.3.8 --cli cursor --yes
-npx github:dancampari/harness#v0.3.8 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.3.8 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.3.9 --yes
+npx github:dancampari/harness#v0.3.9 --cli codex --yes
+npx github:dancampari/harness#v0.3.9 --cli claude --yes
+npx github:dancampari/harness#v0.3.9 --cli cursor --yes
+npx github:dancampari/harness#v0.3.9 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.3.9 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -78,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.3.8 --yes
-npx github:dancampari/harness#v0.3.8 sprint new "implement user auth"
+npx github:dancampari/harness#v0.3.9 --yes
+npx github:dancampari/harness#v0.3.9 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -93,10 +95,10 @@ contract yourself:
 Let Codex, Claude Code, Cursor, or a human implement the feature, then run:
 
 ```bash
-npx github:dancampari/harness#v0.3.8 sprint qa
-npx github:dancampari/harness#v0.3.8 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.3.8 sprint score
-npx github:dancampari/harness#v0.3.8 run --resume
+npx github:dancampari/harness#v0.3.9 sprint qa
+npx github:dancampari/harness#v0.3.9 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.3.9 sprint score
+npx github:dancampari/harness#v0.3.9 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A

@@ -210,49 +210,29 @@ func setupScope(opts setupOptions, interactive bool) (string, error) {
 }
 
 func promptYesNo(question string, fallback bool) (bool, error) {
-	fmt.Println()
-	fmt.Println(question)
-	fmt.Println("  1) Yes")
-	fmt.Println("  2) No")
+	defaultIndex := 1
 	if fallback {
-		fmt.Print("Select [1]: ")
-	} else {
-		fmt.Print("Select [2]: ")
+		defaultIndex = 0
 	}
-	line, err := readPromptLine()
+	value, err := promptSelect(question, []promptOption{
+		{Label: "Yes", Description: "Install agent skills for automatic contract authoring", Value: "yes"},
+		{Label: "No", Description: "Keep contract authoring manual", Value: "no"},
+	}, defaultIndex)
 	if err != nil {
 		return false, err
 	}
-	switch strings.TrimSpace(strings.ToLower(line)) {
-	case "":
-		return fallback, nil
-	case "1", "yes", "y", "sim", "s", "on", "true":
-		return true, nil
-	case "2", "no", "n", "nao", "off", "false":
-		return false, nil
-	default:
-		return false, fmt.Errorf("invalid selection %q", strings.TrimSpace(line))
-	}
+	return value == "yes", nil
 }
 
 func promptScope() (string, error) {
-	fmt.Println()
-	fmt.Println("Installation scope:")
-	fmt.Println("  1) Project only")
-	fmt.Println("  2) Global command + this project")
-	fmt.Print("Select [1]: ")
-	line, err := readPromptLine()
+	value, err := promptSelect("Installation scope", []promptOption{
+		{Label: "Project only", Description: "Write .harness and agent references only in this repo", Value: "project"},
+		{Label: "Global command + this project", Description: "Also copy the resolved harness binary to a global bin directory", Value: "global"},
+	}, 0)
 	if err != nil {
 		return "", err
 	}
-	switch strings.TrimSpace(strings.ToLower(line)) {
-	case "", "1", "project", "local":
-		return "project", nil
-	case "2", "global":
-		return "global", nil
-	default:
-		return "", fmt.Errorf("invalid selection %q", strings.TrimSpace(line))
-	}
+	return value, nil
 }
 
 func normalizeScope(value string) string {

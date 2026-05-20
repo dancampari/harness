@@ -185,39 +185,20 @@ func promptHookTarget(project detect.ProjectInfo) (string, error) {
 		fmt.Printf("  Existing CLI markers: %s\n", joinList(project.CodingCLIs))
 	}
 	fmt.Println()
-	fmt.Println("Which coding CLI will implement code in this repo?")
-	fmt.Println("  1) Claude Code")
-	fmt.Println("  2) Codex")
-	fmt.Println("  3) Cursor IDE")
+	autoLabel := "Auto / all references"
+	autoDescription := "Install all agent references when no marker exists"
 	if len(project.CodingCLIs) > 0 {
-		fmt.Println("  4) Auto-detect existing markers")
-	} else {
-		fmt.Println("  4) Auto / all references")
+		autoLabel = "Auto-detect existing markers"
+		autoDescription = "Use the CLI markers already present in this repo"
 	}
-	fmt.Println("  5) All three")
-	fmt.Println("  6) None")
-	fmt.Print("Select [4]: ")
-
-	line, err := readPromptLine()
-	if err != nil {
-		return "", err
-	}
-	switch strings.TrimSpace(strings.ToLower(line)) {
-	case "1", "claude", "claude code", "claude-code":
-		return "claude", nil
-	case "2", "codex":
-		return "codex", nil
-	case "3", "cursor", "cursor ide":
-		return "cursor", nil
-	case "", "4", "auto":
-		return "auto", nil
-	case "5", "all":
-		return "all", nil
-	case "6", "none", "skip":
-		return "none", nil
-	default:
-		return "", fmt.Errorf("invalid selection %q", strings.TrimSpace(line))
-	}
+	return promptSelect("Which coding CLI will implement code in this repo?", []promptOption{
+		{Label: "Claude Code", Description: "Generate CLAUDE.md and Claude Code hooks/settings", Value: "claude"},
+		{Label: "Codex", Description: "Generate AGENTS.md Harness Gate", Value: "codex"},
+		{Label: "Cursor IDE", Description: "Generate .cursor/rules/harness.mdc", Value: "cursor"},
+		{Label: autoLabel, Description: autoDescription, Value: "auto"},
+		{Label: "All three", Description: "Install Claude Code, Codex, and Cursor references", Value: "all"},
+		{Label: "None", Description: "Skip agent references and keep Harness manual", Value: "none"},
+	}, 3)
 }
 
 func installClaudeHooks(skillsEnabled bool) error {

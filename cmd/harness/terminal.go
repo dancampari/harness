@@ -1,7 +1,6 @@
 package harness
 
 import (
-	"bufio"
 	"os"
 	"strings"
 )
@@ -16,8 +15,4 @@ func isTerminal(f *os.File) bool {
 
 func joinList(values []string) string {
 	return strings.Join(values, ", ")
-}
-
-func readPromptLine() (string, error) {
-	return bufio.NewReader(os.Stdin).ReadString('\n')
 }
