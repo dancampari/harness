@@ -51,6 +51,9 @@
 - [x] Keep Harness deterministic: agents write approvals, Harness verifies state
 - [x] Codex project hooks and custom agents for contract author/reviewer flow
 - [x] Claude Code project subagents and edit guard for contract-first flow
+- [x] Repair brief loop: failed QA writes `.harness/repairs/latest.md`
+- [x] `harness sprint score` refuses FAIL by default
+- [x] TUI command prompt, internal scrolling, and resize-safe rendering
 - [ ] Optional provider-specific launch commands for opening Claude Agent View / Codex agent UI
 
 ## v0.5 - Broader Stack Coverage

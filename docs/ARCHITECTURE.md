@@ -43,6 +43,12 @@ are greater than zero, and every active dimension must have at least one real
 configured sensor execute. Missing sensors become `missing-sensor` findings,
 score `0`, and force `FAIL`.
 
+When QA fails, the sprint is not complete. Harness writes
+`.harness/repairs/latest.md` with the failed dimensions, findings, and required
+next action. Agents must repair, rerun QA, and repeat until the verdict is
+`PASS`. `harness sprint score` refuses to consolidate `FAIL` unless the user
+explicitly passes `--allow-fail` for an abandoned-sprint audit record.
+
 Code: `internal/evaluator/evaluator.go`, `internal/config/config.go`.
 
 ### Session Amnesia

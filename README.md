@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.2
+npx github:dancampari/harness#v0.4.3
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.2 --yes
-npx github:dancampari/harness#v0.4.2 --cli codex --yes
-npx github:dancampari/harness#v0.4.2 --cli claude --yes
-npx github:dancampari/harness#v0.4.2 --cli cursor --yes
-npx github:dancampari/harness#v0.4.2 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.4.2 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.4.3 --yes
+npx github:dancampari/harness#v0.4.3 --cli codex --yes
+npx github:dancampari/harness#v0.4.3 --cli claude --yes
+npx github:dancampari/harness#v0.4.3 --cli cursor --yes
+npx github:dancampari/harness#v0.4.3 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.4.3 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.2 --yes
-npx github:dancampari/harness#v0.4.2 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.3 --yes
+npx github:dancampari/harness#v0.4.3 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,23 +95,35 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.2 contract propose
-npx github:dancampari/harness#v0.4.2 contract approve --role planner
-npx github:dancampari/harness#v0.4.2 contract approve --role tester
+npx github:dancampari/harness#v0.4.3 contract propose
+npx github:dancampari/harness#v0.4.3 contract approve --role planner
+npx github:dancampari/harness#v0.4.3 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.2 sprint qa
-npx github:dancampari/harness#v0.4.2 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.2 sprint score
-npx github:dancampari/harness#v0.4.2 run --resume
+npx github:dancampari/harness#v0.4.3 sprint qa
+npx github:dancampari/harness#v0.4.3 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.3 sprint repair
+npx github:dancampari/harness#v0.4.3 sprint score
+npx github:dancampari/harness#v0.4.3 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
 missing baseline is a failure by design.
+
+If QA fails, Harness writes an actionable repair brief:
+
+```text
+.harness/repairs/latest.md
+```
+
+Agents must read that brief, fix findings, rerun `harness sprint qa`, and
+repeat until the verdict is `PASS`. `harness sprint score` refuses to
+consolidate `FAIL` by default. Use `--allow-fail` only for an explicit
+abandoned-sprint audit trail.
 
 ## Does The User Interact?
 
@@ -133,7 +145,8 @@ to approve intent:
 - provide the original prompt to the coding CLI;
 - answer small product questions only when the request is ambiguous;
 - review and accept the first screenshot baseline;
-- inspect reports when QA fails.
+- inspect reports when QA fails only if the agent cannot repair the issue or
+  the repair brief asks for human approval.
 
 Codex, Claude Code, and Cursor MUST call Harness functions autonomously after
 bootstrap. The public function interface is the Harness CLI. In other words,
@@ -159,6 +172,11 @@ the contract Markdown automatically. A separate tester/reviewer role must then
 review the same contract hash before implementation. Harness remains the
 deterministic validator; the skills only guide agents toward viable contracts.
 
+When updating Harness in an existing project, rerun `harness install-hooks
+--skills on` or `harness skills install --force` to refresh the generated skill
+documents. This does not overwrite contracts, reports, memory, screenshots, or
+progress history.
+
 ```bash
 harness sprint status
 harness sprint new "<goal>"
@@ -167,6 +185,7 @@ harness contract approve --role planner
 harness contract approve --role tester
 harness contract status
 harness sprint qa --format=json
+harness sprint repair
 harness sprint score
 harness doctor
 ```
@@ -302,20 +321,34 @@ contracts, reports, or progress.
 
 The sprint table now behaves like a pipeline dashboard: each stage has a
 fixed-width cell, active work shows a spinner, completed work shows a check, and
-the score step keeps spinning until `harness sprint score` records progress.
-Long goals stay inside the Goal column and are truncated instead of pushing QA
-or Score out of alignment.
+the score cell shows the last QA score as soon as QA finishes. It only shows a
+check after `harness sprint score` consolidates progress. Long goals stay inside
+the Goal column and are truncated instead of pushing QA or Score out of
+alignment.
 
 When QA writes `.harness/reports/latest.json`, the Verdict panel opens
 automatically inside the TUI. It summarizes the latest sprint verdict,
 dimension scores, thresholds, findings, and sensors without requiring the user
 to open the markdown report manually.
 
+Controls inside the TUI:
+
+- `:` or `c` opens the command prompt.
+- `qa`, `accept`, `score`, `status`, `doctor`, `propose`, `approve tester`,
+  and `approve planner` run Harness commands without leaving the dashboard.
+- `!<shell command>` runs a shell command from the project root.
+- `Up/Down` scrolls Activity; `PgUp/PgDn` scrolls Sprints.
+- `r` refreshes and `q` quits.
+
+The TUI uses the terminal alternate screen, so native scrollbar visibility is
+terminal-dependent. When content exceeds the viewport, Harness shows internal
+range labels like `Activity 1-6/12` and `Sprints 3-8/15`.
+
 ```text
-harness  Autonomous Development Pipeline   v0.4.2
+harness  Autonomous Development Pipeline   v0.4.3
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
-001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    ⠋ SCORE 2.5s    0
+001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    98      2.5s    0
 
 Verdict
 sprint 001  PASS  score 98/100  runtime 2.5s
@@ -328,7 +361,8 @@ Activity
 watching .harness  last event: qa report updated  updated just now
 QA PASS  sprint 001  score 98/100  runtime 2.5s
 
-ready   project harness-demo   sprint 1/1   avg score 98   watch just now: qa report updated   elapsed 2m   [q quit | r refresh]
+ready   project harness-demo   sprint 1/1   avg score 98   watch just now: qa report updated   elapsed 2m
+[: command] qa | accept | score | status | doctor | !shell    [r refresh | q quit | arrows scroll]
 ```
 
 ## Strict Pass Policy
@@ -398,6 +432,8 @@ Harness creates this local directory:
       tester.json
   evaluations/
   reports/
+  repairs/
+    latest.md
   screenshots/
     baseline/
     current/
@@ -406,7 +442,8 @@ Harness creates this local directory:
 ```
 
 `progress.md` is the narrative project memory and should be committed.
-`memory.db` is a local SQLite index and should stay local.
+`memory.db`, `reports/`, `repairs/`, and `screenshots/` are generated local
+state and should stay local.
 
 ## Commands
 
@@ -415,7 +452,7 @@ harness                         one-command setup
 harness setup [--yes] [--cli auto|codex|claude|cursor|all|none] [--skills auto|on|off] [--scope auto|project|global] [--start]
 harness init [--force] [--install-hooks] [--cli auto|codex|claude|cursor|all|none] [--skills on|off]
 harness install-hooks [--interactive] [--cli auto|codex|claude|cursor|all|none] [--skills auto|on|off]
-harness skills install
+harness skills install [--force]
 harness skills status
 harness doctor
 harness spec
@@ -426,7 +463,8 @@ harness contract propose [--sprint N]
 harness contract approve --role planner|tester [--sprint N]
 harness contract reject --role planner|tester --reason <text> [--sprint N]
 harness sprint qa [--format=tty|json] [--accept-screenshots] [--allow-unagreed]
-harness sprint score
+harness sprint repair
+harness sprint score [--allow-fail]
 harness sprint list
 harness run [--resume]
 harness progress

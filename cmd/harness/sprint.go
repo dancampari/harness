@@ -19,6 +19,7 @@ func newSprintCmd() *cobra.Command {
 		newSprintNewCmd(),
 		newSprintStatusCmd(),
 		newSprintQACmd(),
+		newSprintRepairCmd(),
 		newSprintScoreCmd(),
 		newSprintListCmd(),
 	)
@@ -130,15 +131,16 @@ users never pass it; the parent process sets it when forking.`,
 }
 
 func newSprintScoreCmd() *cobra.Command {
-	return &cobra.Command{
+	var allowFail bool
+	cmd := &cobra.Command{
 		Use:   "score",
-		Short: "Consolidate verdict and update progress.md + memory.db",
+		Short: "Consolidate a passing verdict and update progress.md + memory.db",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, err := sprint.NewManager(".harness")
 			if err != nil {
 				return err
 			}
-			report, err := mgr.Consolidate()
+			report, err := mgr.Consolidate(allowFail)
 			if err != nil {
 				return err
 			}
@@ -148,6 +150,40 @@ func newSprintScoreCmd() *cobra.Command {
 			fmt.Printf("  Evaluation: %s\n", report.EvaluationPath)
 			fmt.Printf("  Progress updated: %s\n", filepath.Join(".harness", "progress.md"))
 			openReportIfInteractive(report.EvaluationPath)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&allowFail, "allow-fail", false,
+		"record a failing sprint anyway; use only for explicit abandonment/audit")
+	return cmd
+}
+
+func newSprintRepairCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "repair",
+		Short: "Create and print the repair brief for the latest failing QA report",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			mgr, err := sprint.NewManager(".harness")
+			if err != nil {
+				return err
+			}
+			brief, err := mgr.WriteRepairBrief()
+			if err != nil {
+				return err
+			}
+			if brief.LatestPath == "" {
+				fmt.Printf("Sprint %03d has QA %s (%d/100). No repair required.\n",
+					brief.SprintNumber, brief.Verdict, brief.TotalScore)
+				return nil
+			}
+			b, err := os.ReadFile(brief.LatestPath)
+			if err != nil {
+				return err
+			}
+			fmt.Print(string(b))
+			if len(b) == 0 || b[len(b)-1] != '\n' {
+				fmt.Println()
+			}
 			return nil
 		},
 	}

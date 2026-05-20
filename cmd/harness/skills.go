@@ -10,18 +10,21 @@ import (
 )
 
 func newSkillsCmd() *cobra.Command {
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "skills",
 		Short: "Manage Harness agent skill documents",
 	}
-	cmd.AddCommand(&cobra.Command{
+	installCmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install automated contract-authoring skills into .harness/",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInstallSkills(".harness")
+			return runInstallSkillsWithOptions(".harness", force)
 		},
-	})
+	}
+	installCmd.Flags().BoolVar(&force, "force", false, "refresh generated Harness skill documents if they already exist")
+	cmd.AddCommand(installCmd)
 	cmd.AddCommand(&cobra.Command{
 		Use:   "status",
 		Short: "Show whether automated contract-authoring skills are installed",
@@ -39,6 +42,14 @@ func newSkillsCmd() *cobra.Command {
 }
 
 func runInstallSkills(root string) error {
+	return runInstallSkillsWithOptions(root, false)
+}
+
+func refreshInstallSkills(root string) error {
+	return runInstallSkillsWithOptions(root, true)
+}
+
+func runInstallSkillsWithOptions(root string, force bool) error {
 	if root == "" {
 		root = ".harness"
 	}
@@ -59,8 +70,14 @@ func runInstallSkills(root string) error {
 		filepath.Join(root, "skills", "contract-review", "SKILL.md"):                                contractReviewSkill,
 	}
 	for path, content := range files {
-		if err := writeTemplate(path, content); err != nil {
-			return err
+		if force {
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				return err
+			}
+		} else {
+			if err := writeTemplate(path, content); err != nil {
+				return err
+			}
 		}
 	}
 	if err := ensureAgentProtocolMode(root, true); err != nil {
@@ -134,7 +151,10 @@ Use this skill before implementing a user request.
 12. Never run harness sprint qa --allow-unagreed unless the user explicitly asks for an emergency override.
 13. Implement only the current sprint after agreement.
 14. Run: harness sprint qa --format=json after meaningful changes.
-15. Read .harness/reports/latest.json, fix findings, rerun QA, then run: harness sprint score.
+15. Read .harness/reports/latest.json. If verdict is FAIL, run: harness sprint repair.
+16. Read .harness/repairs/latest.md, fix findings, and rerun QA.
+17. Repeat repair -> QA until verdict is PASS.
+18. Run: harness sprint score only after QA is PASS.
 
 ## Required Contract Properties
 

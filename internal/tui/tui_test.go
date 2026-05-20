@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/dancampari/harness/internal/agreement"
+	"github.com/dancampari/harness/internal/evaluator"
 )
 
 func TestViewRendersDashboardSections(t *testing.T) {
@@ -91,6 +93,27 @@ Ship a demo dashboard.
 	} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected view to contain %q\n%s", expected, view)
+		}
+	}
+}
+
+func TestViewFitsTerminalSize(t *testing.T) {
+	root := t.TempDir()
+	harnessDir := filepath.Join(root, ".harness")
+	if err := os.MkdirAll(filepath.Join(harnessDir, "contracts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(harnessDir, true, "0.0.0-test")
+	m.width = 80
+	m.height = 10
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	if len(lines) != m.height {
+		t.Fatalf("expected view to fit %d terminal rows, got %d\n%s", m.height, len(lines), view)
+	}
+	for _, line := range lines {
+		if lipgloss.Width(line) < m.width {
+			t.Fatalf("expected line to clear terminal width %d, got %d\n%s", m.width, lipgloss.Width(line), view)
 		}
 	}
 }
@@ -178,6 +201,116 @@ func TestSprintTableKeepsGoalInFixedColumn(t *testing.T) {
 			t.Fatalf("expected row to stay within the requested width\n%s", rendered)
 		}
 	}
+}
+
+func TestScoreDoesNotSpinAfterQAWithoutConsolidation(t *testing.T) {
+	row := sprintRow{
+		Number:   1,
+		Goal:     "demo",
+		Contract: "AGREED",
+		Build:    "DONE",
+		QA:       "FAIL",
+		Score:    "93",
+		Time:     "2.5s",
+		Findings: 1,
+		Scored:   false,
+	}
+	rendered := renderSprintRow(row, 84, 0)
+	if strings.Contains(rendered, "SCORE") {
+		t.Fatalf("finished QA must not render an endless score spinner\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "× 93") {
+		t.Fatalf("expected finished failed QA score to stay visible with failure marker\n%s", rendered)
+	}
+}
+
+func TestPassingQAWithoutConsolidationUsesPendingScoreMarker(t *testing.T) {
+	row := sprintRow{
+		Number:   1,
+		Goal:     "demo",
+		Contract: "AGREED",
+		Build:    "DONE",
+		QA:       "PASS",
+		Score:    "98",
+		Time:     "2.5s",
+		Findings: 0,
+		Scored:   false,
+	}
+	rendered := renderSprintRow(row, 84, 0)
+	if !strings.Contains(rendered, "• 98") {
+		t.Fatalf("expected pending score marker before consolidation\n%s", rendered)
+	}
+	if strings.Contains(rendered, "✓ 98") {
+		t.Fatalf("score must not show check before sprint score consolidation\n%s", rendered)
+	}
+}
+
+func TestFailedScoredSprintDoesNotUseCheckMark(t *testing.T) {
+	row := sprintRow{
+		Number:   1,
+		Goal:     "demo",
+		Contract: "AGREED",
+		Build:    "DONE",
+		QA:       "FAIL",
+		Score:    "40",
+		Time:     "12ms",
+		Findings: 2,
+		Scored:   true,
+	}
+	rendered := renderSprintRow(row, 84, 0)
+	if strings.Contains(rendered, "✓ 40") {
+		t.Fatalf("failed scored sprint must not render a check mark for score\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "× 40") {
+		t.Fatalf("expected failed score marker\n%s", rendered)
+	}
+}
+
+func TestVisibleVerdictDimensionsKeepFailuresVisible(t *testing.T) {
+	dims := map[string]evaluator.DimensionScore{
+		"correctness":  {Passed: true},
+		"coverage":     {Passed: true},
+		"complexity":   {Passed: true},
+		"security":     {Passed: true},
+		"architecture": {Passed: true},
+		"contract":     {Passed: true},
+		"e2e":          {Passed: false},
+	}
+	names := visibleVerdictDimensions(dims, 6)
+	if !containsString(names, "e2e") {
+		t.Fatalf("expected failed e2e dimension to stay visible, got %#v", names)
+	}
+}
+
+func TestHarnessCommandShortcuts(t *testing.T) {
+	cases := map[string][]string{
+		"qa":             {"sprint", "qa"},
+		"accept":         {"sprint", "qa", "--accept-screenshots"},
+		"repair":         {"sprint", "repair"},
+		"score":          {"sprint", "score"},
+		"status":         {"sprint", "status"},
+		"propose":        {"contract", "propose"},
+		"approve tester": {"contract", "approve", "--role", "tester"},
+		"new demo goal":  {"sprint", "new", "demo goal"},
+	}
+	for input, expected := range cases {
+		got, err := harnessCommandArgs(input)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", input, err)
+		}
+		if strings.Join(got, "\x00") != strings.Join(expected, "\x00") {
+			t.Fatalf("%s: expected %#v, got %#v", input, expected, got)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRefreshDetectsHarnessArtifactChanges(t *testing.T) {

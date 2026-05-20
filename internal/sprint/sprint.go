@@ -242,6 +242,11 @@ func (m *Manager) RunQAInternal(stdout io.Writer, acceptScreenshots bool) error 
 	if err := m.writeJSONReport(n, result); err != nil {
 		return err
 	}
+	if result.Verdict == "PASS" {
+		_ = m.clearRepairBrief(n)
+	} else if _, err := m.writeRepairBriefFromResult(n, result); err != nil {
+		return err
+	}
 
 	// Emit ONLY the result as JSON on stdout. The parent depends on
 	// this output being parseable; no other bytes may be written.
@@ -319,7 +324,7 @@ func isolatedEvaluatorEnv(repoRoot string, acceptScreenshots bool) []string {
 
 // Consolidate finalizes the sprint: writes the score, appends to
 // progress.md, records the run in memory.db. Called after RunQA.
-func (m *Manager) Consolidate() (*ConsolidatedReport, error) {
+func (m *Manager) Consolidate(allowFail bool) (*ConsolidatedReport, error) {
 	n, err := m.currentSprintNumber()
 	if err != nil {
 		return nil, err
@@ -340,6 +345,13 @@ func (m *Manager) Consolidate() (*ConsolidatedReport, error) {
 	if !ag.ReportIsCurrent(ev.Timestamp) {
 		return nil, fmt.Errorf("contract agreement required before scoring: sprint %03d report is stale or unagreed; run contract propose/approve, then rerun harness sprint qa",
 			n)
+	}
+	if ev.Verdict != "PASS" && !allowFail {
+		if _, err := m.writeRepairBriefFromResult(n, &ev); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("sprint %03d cannot be scored because QA verdict is %s; read .harness/repairs/latest.md, fix findings, rerun harness sprint qa, and score only after PASS",
+			n, ev.Verdict)
 	}
 
 	// Record in memory.db.
@@ -383,6 +395,33 @@ func (m *Manager) Consolidate() (*ConsolidatedReport, error) {
 		EvaluationPath: filepath.Join(m.root, "evaluations",
 			fmt.Sprintf("sprint-%03d.md", n)),
 	}, nil
+}
+
+// WriteRepairBrief creates an actionable repair brief from the latest current
+// QA report. Agents read this after FAIL and iterate until QA returns PASS.
+func (m *Manager) WriteRepairBrief() (*RepairBrief, error) {
+	n, err := m.currentSprintNumber()
+	if err != nil {
+		return nil, err
+	}
+	reportPath := filepath.Join(m.root, "reports", fmt.Sprintf("sprint-%03d.json", n))
+	b, err := os.ReadFile(reportPath)
+	if err != nil {
+		return nil, fmt.Errorf("read report: %w", err)
+	}
+	var ev evaluator.EvaluationResult
+	if err := json.Unmarshal(b, &ev); err != nil {
+		return nil, err
+	}
+	if ev.Verdict == "PASS" {
+		_ = m.clearRepairBrief(n)
+		return &RepairBrief{
+			SprintNumber: n,
+			Verdict:      ev.Verdict,
+			TotalScore:   ev.TotalScore,
+		}, nil
+	}
+	return m.writeRepairBriefFromResult(n, &ev)
 }
 
 // List returns all completed sprints with their scores.
@@ -572,6 +611,212 @@ func (m *Manager) appendProgress(n int, r *evaluator.EvaluationResult) error {
 	return nil
 }
 
+func (m *Manager) writeRepairBriefFromResult(n int, r *evaluator.EvaluationResult) (*RepairBrief, error) {
+	dir := filepath.Join(m.root, "repairs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, fmt.Sprintf("sprint-%03d.md", n))
+	latest := filepath.Join(dir, "latest.md")
+	content := m.renderRepairBrief(n, r)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(latest, []byte(content), 0o644); err != nil {
+		return nil, err
+	}
+	return &RepairBrief{
+		SprintNumber: n,
+		Verdict:      r.Verdict,
+		TotalScore:   r.TotalScore,
+		Path:         path,
+		LatestPath:   latest,
+	}, nil
+}
+
+func (m *Manager) clearRepairBrief(n int) error {
+	dir := filepath.Join(m.root, "repairs")
+	_ = os.Remove(filepath.Join(dir, "latest.md"))
+	_ = os.Remove(filepath.Join(dir, fmt.Sprintf("sprint-%03d.md", n)))
+	return nil
+}
+
+func (m *Manager) renderRepairBrief(n int, r *evaluator.EvaluationResult) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# Sprint %03d Repair Brief\n\n", n)
+	fmt.Fprintf(&sb, "## Status\n")
+	fmt.Fprintf(&sb, "- Verdict: %s\n", r.Verdict)
+	fmt.Fprintf(&sb, "- Score: %d/100\n", r.TotalScore)
+	fmt.Fprintf(&sb, "- Report: `.harness/reports/sprint-%03d.json`\n", n)
+	fmt.Fprintf(&sb, "- Evaluation: `.harness/evaluations/sprint-%03d.md`\n\n", n)
+
+	if r.Verdict == "PASS" {
+		fmt.Fprintf(&sb, "No repair required. Run `harness sprint score` to consolidate the sprint.\n")
+		return sb.String()
+	}
+
+	fmt.Fprintf(&sb, "## Required Agent Loop\n")
+	fmt.Fprintf(&sb, "1. Fix every actionable finding below without changing the agreed contract.\n")
+	fmt.Fprintf(&sb, "2. Run `harness sprint qa --format=json` after the fix.\n")
+	fmt.Fprintf(&sb, "3. If QA still returns FAIL, reread `.harness/repairs/latest.md` and repeat.\n")
+	fmt.Fprintf(&sb, "4. Run `harness sprint score` only after QA returns PASS.\n")
+	fmt.Fprintf(&sb, "5. Do not declare the sprint complete while this file contains unresolved findings.\n\n")
+
+	flat := flattenedFindings(r)
+	if len(flat) == 0 {
+		fmt.Fprintf(&sb, "## Findings\n")
+		fmt.Fprintf(&sb, "- QA failed without structured findings. Inspect `.harness/reports/sprint-%03d.json`, fix the failing sensor output, and rerun QA.\n\n", n)
+		return sb.String()
+	}
+
+	fmt.Fprintf(&sb, "## Findings\n")
+	fmt.Fprintf(&sb, "| Severity | Dimension | Rule | Location | Action |\n")
+	fmt.Fprintf(&sb, "|---|---|---|---|---|\n")
+	for _, f := range flat {
+		fmt.Fprintf(&sb, "| %s | %s | %s | %s | %s |\n",
+			escapeTable(f.severity),
+			escapeTable(f.dimension),
+			escapeTable(f.rule),
+			escapeTable(f.location),
+			escapeTable(repairAction(f)),
+		)
+	}
+	fmt.Fprintln(&sb)
+
+	if visualApprovalRequired(flat) {
+		fmt.Fprintf(&sb, "## User Approval Required\n")
+		fmt.Fprintf(&sb, "- A screenshot baseline is missing or visual output changed. The agent must not accept it silently.\n")
+		fmt.Fprintf(&sb, "- Ask the user to review `.harness/screenshots/current/` and, for regressions, `.harness/screenshots/diff/`.\n")
+		fmt.Fprintf(&sb, "- Only after explicit approval, run `harness sprint qa --accept-screenshots`.\n\n")
+	}
+
+	fmt.Fprintf(&sb, "## Agent Notes\n")
+	fmt.Fprintf(&sb, "- Fix product code, tests, config, or contract deliverables only when they are the real cause.\n")
+	fmt.Fprintf(&sb, "- Do not lower thresholds or remove acceptance criteria to make QA pass.\n")
+	fmt.Fprintf(&sb, "- If a required tool is missing, run `harness doctor` and install only the project dependency that matches the stack.\n")
+	return sb.String()
+}
+
+type repairFinding struct {
+	severity  string
+	dimension string
+	rule      string
+	location  string
+	message   string
+}
+
+func flattenedFindings(r *evaluator.EvaluationResult) []repairFinding {
+	var out []repairFinding
+	if r.ContractCheck.Status != "" && r.ContractCheck.Status != "satisfied" {
+		for _, item := range r.ContractCheck.MissingDeliverables {
+			out = append(out, repairFinding{
+				severity:  "high",
+				dimension: "contract",
+				rule:      "missing-deliverable",
+				location:  "-",
+				message:   item,
+			})
+		}
+		for _, item := range r.ContractCheck.UnmetCriteria {
+			out = append(out, repairFinding{
+				severity:  "high",
+				dimension: "contract",
+				rule:      "unmet-criterion",
+				location:  "-",
+				message:   item,
+			})
+		}
+	}
+	for dimName, d := range r.Dimensions {
+		for _, f := range d.Findings {
+			location := f.File
+			if location == "" {
+				location = "-"
+			}
+			if f.Line > 0 {
+				location = fmt.Sprintf("%s:%d", location, f.Line)
+			}
+			out = append(out, repairFinding{
+				severity:  string(f.Severity),
+				dimension: dimName,
+				rule:      f.Rule,
+				location:  filepath.ToSlash(location),
+				message:   f.Message,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if repairSevRank(out[i].severity) == repairSevRank(out[j].severity) {
+			if out[i].dimension == out[j].dimension {
+				return out[i].rule < out[j].rule
+			}
+			return out[i].dimension < out[j].dimension
+		}
+		return repairSevRank(out[i].severity) > repairSevRank(out[j].severity)
+	})
+	return out
+}
+
+func repairAction(f repairFinding) string {
+	switch f.rule {
+	case "screenshot-baseline-missing":
+		return fmt.Sprintf("Review %s with the user. If correct, rerun QA with --accept-screenshots.", f.location)
+	case "visual-regression":
+		return fmt.Sprintf("Inspect %s and .harness/screenshots/diff; fix UI regression or ask user to approve the new baseline.", f.location)
+	case "missing-sensor":
+		return "Run harness doctor, install/configure the missing sensor, then rerun QA."
+	case "missing-deliverable", "unmet-criterion":
+		return f.message
+	case "no-e2e-tests":
+		return "Add real Playwright coverage for the primary flow or disable e2e by setting threshold and weight to 0."
+	case "e2e-failure":
+		return "Fix the browser flow or selector failure reported by Playwright."
+	case "test-failure":
+		return "Fix the failing test or the implementation under test."
+	case "coverage-below-threshold":
+		return "Add meaningful tests for uncovered behavior."
+	default:
+		if f.message != "" {
+			return f.message
+		}
+		return "Fix this finding and rerun harness sprint qa."
+	}
+}
+
+func visualApprovalRequired(findings []repairFinding) bool {
+	for _, f := range findings {
+		if f.rule == "screenshot-baseline-missing" || f.rule == "visual-regression" {
+			return true
+		}
+	}
+	return false
+}
+
+func escapeTable(value string) string {
+	value = strings.ReplaceAll(value, "\n", " ")
+	value = strings.ReplaceAll(value, "|", "\\|")
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
+func repairSevRank(severity string) int {
+	switch severity {
+	case "critical":
+		return 4
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	default:
+		return 0
+	}
+}
+
 func extractDimScores(dims map[string]evaluator.DimensionScore) map[string]int {
 	out := map[string]int{}
 	for k, v := range dims {
@@ -599,6 +844,15 @@ type ConsolidatedReport struct {
 }
 
 type evScore struct{ Total int }
+
+// RepairBrief points agents at the current failure loop instructions.
+type RepairBrief struct {
+	SprintNumber int
+	Verdict      string
+	TotalScore   int
+	Path         string
+	LatestPath   string
+}
 
 // SprintListItem is one row in `harness sprint list`.
 type SprintListItem struct {

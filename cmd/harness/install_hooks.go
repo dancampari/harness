@@ -61,6 +61,9 @@ func runInstallHooks(opts installHookOptions) error {
 		if err := installProjectCommand(); err != nil {
 			return err
 		}
+		if err := ensureHarnessGitignore(".harness"); err != nil {
+			return err
+		}
 	}
 	project := detect.DetectProject(".")
 	targets, err := resolveHookTargets(opts, project)
@@ -76,8 +79,10 @@ func runInstallHooks(opts installHookOptions) error {
 			if err := runInstallSkills(".harness"); err != nil {
 				return err
 			}
-		} else if err := ensureAgentProtocolMode(".harness", true); err != nil {
-			return err
+		} else {
+			if err := refreshInstallSkills(".harness"); err != nil {
+				return err
+			}
 		}
 	} else if _, err := os.Stat(".harness"); err == nil {
 		if err := ensureAgentProtocolMode(".harness", false); err != nil {
@@ -511,6 +516,7 @@ Harness function calls:
 - harness.contract_approve: ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + `
 - harness.contract_reject: ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + `
 - harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+- harness.repair: ` + "`" + invoke + ` sprint repair` + "`" + `
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
@@ -539,9 +545,11 @@ Autonomous protocol:
    forbidden.
 9. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
    without waiting for the user.
-10. Read .harness/reports/latest.json. If the verdict is FAIL or any
-   high/critical findings exist, fix them and rerun QA.
-11. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the task complete.
+10. Read .harness/reports/latest.json. If the verdict is FAIL, run
+   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix the
+   listed findings, and rerun QA. Repeat until verdict is PASS.
+11. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS. Never declare a
+   sprint complete with FAIL.
 
 Only ask the user for product decisions, acceptance-criteria changes, dependency
 installation approval when it changes the project stack, or visual baseline
@@ -569,6 +577,7 @@ Harness function calls:
 - harness.contract_approve: ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + `
 - harness.contract_reject: ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + `
 - harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+- harness.repair: ` + "`" + invoke + ` sprint repair` + "`" + `
 - harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
@@ -585,8 +594,10 @@ Autonomous protocol for Claude Code:
    implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED.
 5. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
    without asking the user.
-6. Read .harness/reports/latest.json. Fix high/critical findings and rerun QA.
-7. Run ` + "`" + invoke + ` sprint score` + "`" + ` before saying the task is complete.
+6. Read .harness/reports/latest.json. If verdict is FAIL, run
+   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix
+   findings, and rerun QA until PASS.
+7. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
 
 Only ask the user for product decisions, acceptance criteria changes,
 dependency installation approval when it changes the project stack, or visual
@@ -613,9 +624,10 @@ This project uses Harness Engineering. Always:
    implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED.
 6. After implementing, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` in the integrated terminal
    without asking the user to run it.
-7. Process .harness/reports/latest.json. Iterate on findings before
-   marking the task complete.
-8. Run ` + "`" + invoke + ` sprint score` + "`" + ` to update progress.md.
+7. Process .harness/reports/latest.json. If verdict is FAIL, run
+   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix findings,
+   and rerun QA until PASS.
+8. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
 
 Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajectory of the project.
 `

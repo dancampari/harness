@@ -66,7 +66,8 @@ Workflow:
   harness contract approve --role tester
   # ... CLI implements only after the contract is AGREED ...
   harness sprint qa               # runs Evaluator (isolated subprocess)
-  harness sprint score            # consolidates verdict + updates progress.md
+  harness sprint repair           # prints the latest repair brief after FAIL
+  harness sprint score            # consolidates PASS + updates progress.md
   harness doctor                  # checks active dimensions and sensor tooling
   harness run --resume            # live TUI of the whole pipeline
 

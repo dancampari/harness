@@ -56,6 +56,19 @@ Prove active dimensions cannot pass without real sensors.
 	if !hasRuleInDimensions(result.Dimensions, "missing-sensor") {
 		t.Fatalf("expected missing-sensor finding, got %s", string(out))
 	}
+	assertFileContains(t,
+		filepath.Join(root, ".harness", "repairs", "latest.md"),
+		"Required Agent Loop",
+	)
+	cmd := exec.Command(exe, "sprint", "score")
+	cmd.Dir = root
+	scoreOut, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected sprint score to refuse failing QA\n%s", scoreOut)
+	}
+	if !strings.Contains(string(scoreOut), "cannot be scored because QA verdict is FAIL") {
+		t.Fatalf("expected score refusal to mention failing QA\n%s", scoreOut)
+	}
 }
 
 func TestCLIQAUsesIsolatedSubprocess(t *testing.T) {

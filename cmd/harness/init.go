@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dancampari/harness/internal/config"
 	"github.com/dancampari/harness/internal/detect"
@@ -25,7 +26,7 @@ func newInitCmd() *cobra.Command {
   - config.yaml (auto-detected for your stack)
   - spec.md (template you should fill in)
   - progress.md (the narrative brain of the project)
-  - contracts/, evaluations/, screenshots/, reports/ (empty dirs)
+  - contracts/, evaluations/, repairs/, screenshots/, reports/ (empty dirs)
   - memory.db (SQLite index, initialized)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			skillsMode := normalizeSkillsMode(skills)
@@ -67,6 +68,7 @@ func runInit(opts initOptions) error {
 		filepath.Join(root, "contracts"),
 		filepath.Join(root, "approvals"),
 		filepath.Join(root, "evaluations"),
+		filepath.Join(root, "repairs"),
 		filepath.Join(root, "screenshots"),
 		filepath.Join(root, "reports"),
 	}
@@ -106,8 +108,7 @@ func runInit(opts initOptions) error {
 		return fmt.Errorf("migrate memory: %w", err)
 	}
 
-	gi := filepath.Join(root, ".gitignore")
-	_ = os.WriteFile(gi, []byte("memory.db\nreports/\nscreenshots/\n"), 0o644)
+	_ = ensureHarnessGitignore(root)
 
 	fmt.Println("OK .harness/ initialized")
 	fmt.Printf("  Project: %s\n", valueOr(project.Name, "unknown"))
@@ -149,6 +150,24 @@ func writeTemplate(path, content string) error {
 		return nil // do not overwrite user content
 	}
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func ensureHarnessGitignore(root string) error {
+	path := filepath.Join(root, ".gitignore")
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	}
+	lines := []string{"memory.db", "reports/", "repairs/", "screenshots/"}
+	for _, line := range lines {
+		if !strings.Contains(existing, line) {
+			if existing != "" && !strings.HasSuffix(existing, "\n") {
+				existing += "\n"
+			}
+			existing += line + "\n"
+		}
+	}
+	return os.WriteFile(path, []byte(existing), 0o644)
 }
 
 func valueOr(value, fallback string) string {
@@ -213,7 +232,8 @@ Harness functions:
 | harness.contract_approve | ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + ` | When a required agent role agrees with the exact contract hash |
 | harness.contract_reject | ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + ` | When a required role cannot accept the contract |
 | harness.qa | ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` | After meaningful code changes and before completion |
-| harness.score | ` + "`" + invoke + ` sprint score` + "`" + ` | After QA has produced the final verdict |
+| harness.repair | ` + "`" + invoke + ` sprint repair` + "`" + ` | When QA returns FAIL |
+| harness.score | ` + "`" + invoke + ` sprint score` + "`" + ` | Only after QA verdict is PASS |
 | harness.doctor | ` + "`" + invoke + ` doctor` + "`" + ` | When a required sensor/tool is missing |
 | harness.terminal | ` + "`" + invoke + ` run --resume` + "`" + ` | When the user wants the live terminal dashboard |
 
@@ -236,9 +256,12 @@ Autonomy rules:
    asks for an emergency override.
 8. Run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` without waiting for the user after
    meaningful code changes.
-9. Read .harness/reports/latest.json after QA. Fix high/critical findings and
-   rerun QA.
-10. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the work complete.
+9. Read .harness/reports/latest.json after QA. If verdict is FAIL, run
+   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix the
+   listed findings, and rerun QA. Repeat until verdict is PASS.
+10. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA returns PASS. A failing
+   sprint is not complete and must not be scored unless the user explicitly
+   asks for an emergency failure record.
 11. Only ask the user for decisions Harness cannot make deterministically:
    product intent, changing acceptance criteria, installing missing project
    tools when that changes the app stack, or accepting visual baselines with
