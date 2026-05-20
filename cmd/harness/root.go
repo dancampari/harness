@@ -38,6 +38,7 @@ func Execute(version string) error {
 		newExplainCmd(),
 		newInstallHooksCmd(),
 		newSkillsCmd(),
+		newGuardCmd(),
 		newDoctorCmd(),
 	)
 

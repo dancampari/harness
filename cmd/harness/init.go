@@ -225,14 +225,21 @@ Autonomy rules:
    start.
 2. Create or update the sprint contract before implementing a feature.
 3. Run ` + "`" + invoke + ` contract propose` + "`" + ` after the contract is written.
-4. Do not implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED. The
+4. If agent automation is available, use a contract-author agent for creation
+   and repair, and an independent contract-reviewer/tester agent for approval
+   or rejection.
+5. Do not implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED. The
    planner and tester roles must approve the same contract hash.
-5. Run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` without waiting for the user after
+6. If status is DRAFT, PROPOSED, CHANGED, REJECTED, MISSING, STALE, or
+   BLOCKED, product-file edits are forbidden. Repair the contract first.
+7. Never run ` + "`" + invoke + ` sprint qa --allow-unagreed` + "`" + ` unless the user explicitly
+   asks for an emergency override.
+8. Run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` without waiting for the user after
    meaningful code changes.
-6. Read .harness/reports/latest.json after QA. Fix high/critical findings and
+9. Read .harness/reports/latest.json after QA. Fix high/critical findings and
    rerun QA.
-7. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the work complete.
-8. Only ask the user for decisions Harness cannot make deterministically:
+10. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the work complete.
+11. Only ask the user for decisions Harness cannot make deterministically:
    product intent, changing acceptance criteria, installing missing project
    tools when that changes the app stack, or accepting visual baselines with
    ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.

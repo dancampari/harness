@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.4.1
+npx github:dancampari/harness#v0.4.2
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -55,12 +55,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.1 --yes
-npx github:dancampari/harness#v0.4.1 --cli codex --yes
-npx github:dancampari/harness#v0.4.1 --cli claude --yes
-npx github:dancampari/harness#v0.4.1 --cli cursor --yes
-npx github:dancampari/harness#v0.4.1 --cli claude --skills on --scope project --yes
-npx github:dancampari/harness#v0.4.1 --cli codex --skills off --scope global --yes
+npx github:dancampari/harness#v0.4.2 --yes
+npx github:dancampari/harness#v0.4.2 --cli codex --yes
+npx github:dancampari/harness#v0.4.2 --cli claude --yes
+npx github:dancampari/harness#v0.4.2 --cli cursor --yes
+npx github:dancampari/harness#v0.4.2 --cli claude --skills on --scope project --yes
+npx github:dancampari/harness#v0.4.2 --cli codex --skills off --scope global --yes
 ```
 
 The package is also prepared for npm registry publishing as
@@ -80,8 +80,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.4.1 --yes
-npx github:dancampari/harness#v0.4.1 sprint new "implement user auth"
+npx github:dancampari/harness#v0.4.2 --yes
+npx github:dancampari/harness#v0.4.2 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -95,19 +95,19 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.4.1 contract propose
-npx github:dancampari/harness#v0.4.1 contract approve --role planner
-npx github:dancampari/harness#v0.4.1 contract approve --role tester
+npx github:dancampari/harness#v0.4.2 contract propose
+npx github:dancampari/harness#v0.4.2 contract approve --role planner
+npx github:dancampari/harness#v0.4.2 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.4.1 sprint qa
-npx github:dancampari/harness#v0.4.1 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.4.1 sprint score
-npx github:dancampari/harness#v0.4.1 run --resume
+npx github:dancampari/harness#v0.4.2 sprint qa
+npx github:dancampari/harness#v0.4.2 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.4.2 sprint score
+npx github:dancampari/harness#v0.4.2 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. A
@@ -178,8 +178,8 @@ Integration behavior:
 
 | Tool | Installed reference | How Harness is triggered |
 |---|---|---|
-| Codex | `AGENTS.md` Harness Gate | Codex is instructed to run Harness after meaningful changes |
-| Claude Code | `CLAUDE.md` + `.claude/settings.json` | `CLAUDE.md` gives Claude Code the autonomous protocol; hooks run Harness automatically on stop and before commits |
+| Codex | `AGENTS.md`, `.codex/hooks.json`, `.codex/agents/*.toml` | Codex receives the Harness protocol, project custom agents, and a `PreToolUse` guard for `apply_patch/Edit/Write` |
+| Claude Code | `CLAUDE.md`, `.claude/settings.json`, `.claude/agents/*.md` | Claude Code receives the autonomous protocol, project subagents, and a `PreToolUse` guard for `Edit/MultiEdit/Write` |
 | Cursor | `.cursor/rules/harness.mdc` | Cursor receives an always-on rule to run Harness autonomously |
 | Git | `.git/hooks/pre-push` | Safety-net report before push, non-blocking |
 
@@ -210,6 +210,21 @@ The PBQ-style agreement gate is deterministic:
 - QA blocked until the active contract has the required approvals;
 - no LLM judgment inside Harness; agents may write approvals, Harness only
   verifies state, hashes, required roles, and sensor results.
+
+For Codex installations, Harness also writes project-scoped custom agents:
+
+- `.codex/agents/harness-contract-author.toml`;
+- `.codex/agents/harness-contract-reviewer.toml`;
+- `.codex/hooks.json` with a `PreToolUse` guard.
+
+The guard blocks `apply_patch`, `Edit`, `MultiEdit`, and `Write` against
+product files until the active sprint contract is `AGREED`. Contract files and
+Harness control files remain editable so the author/reviewer loop can repair
+weak contracts. In Codex, project-local hooks run only when the `.codex/`
+project layer is trusted by Codex.
+
+For Claude Code installations, Harness writes equivalent project subagents
+under `.claude/agents/` and a `PreToolUse` guard under `.claude/settings.json`.
 
 By default the required roles are `planner` and `tester`. If the contract file
 changes after approval, the hash changes and the contract state becomes
@@ -297,7 +312,7 @@ dimension scores, thresholds, findings, and sensors without requiring the user
 to open the markdown report manually.
 
 ```text
-harness  Autonomous Development Pipeline   v0.4.1
+harness  Autonomous Development Pipeline   v0.4.2
 
 #    Goal                         Contract     Build     QA        Score   Time    Find
 001  validate harness demo        ✓ AGREED    ✓ DONE    ✓ PASS    ⠋ SCORE 2.5s    0

@@ -26,6 +26,14 @@ new hash is proposed and approved again.
 
 Code: `internal/agreement/agreement.go`, `cmd/harness/contract.go`.
 
+Provider integrations reinforce the same boundary. Codex installations get
+`.codex/hooks.json` plus `harness_contract_author` and
+`harness_contract_reviewer` custom agents; the hook denies product-file
+`apply_patch/Edit/Write` calls before agreement. Claude Code installations get
+equivalent `.claude/agents/` files and an edit guard in `.claude/settings.json`.
+Cursor receives repository rules because it does not expose the same
+project-local pre-tool hook surface.
+
 ### Premature Victory
 
 `harness sprint qa` runs configured sensors in an isolated evaluator process.

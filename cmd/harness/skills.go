@@ -128,10 +128,13 @@ Use this skill before implementing a user request.
 6. Keep the contract honest: do not remove important acceptance criteria to make QA pass.
 7. Run: harness contract propose.
 8. Approve the planner role only when the contract is complete: harness contract approve --role planner.
-9. Do not implement until harness contract status returns AGREED.
-10. Implement only the current sprint.
-11. Run: harness sprint qa --format=json after meaningful changes.
-12. Read .harness/reports/latest.json, fix findings, rerun QA, then run: harness sprint score.
+9. Ask the independent tester/reviewer role to review the exact hash. In Codex, use harness_contract_reviewer when available. In Claude Code, use harness-contract-reviewer when available.
+10. If tester rejects the contract, repair only the contract, propose the new hash, and approve planner again.
+11. Do not implement until harness contract status returns AGREED.
+12. Never run harness sprint qa --allow-unagreed unless the user explicitly asks for an emergency override.
+13. Implement only the current sprint after agreement.
+14. Run: harness sprint qa --format=json after meaningful changes.
+15. Read .harness/reports/latest.json, fix findings, rerun QA, then run: harness sprint score.
 
 ## Required Contract Properties
 
@@ -176,6 +179,8 @@ Use this skill before implementation, from a tester/reviewer role.
 - Constraints cover architecture, security, visual, complexity, and coverage risks that matter for the sprint.
 - The contract does not lower thresholds or remove risk to make QA easier.
 - No implementation starts until the contract status is AGREED.
+- If the contract is weak, reject it and require the author/planner to repair
+  the contract before any product files are changed.
 `
 
 const sprintPlanningReference = `# Sprint Planning

@@ -89,6 +89,9 @@ func runSetup(opts setupOptions, version string) error {
 			return err
 		}
 	}
+	if err := installProjectCommand(); err != nil {
+		return err
+	}
 
 	if err := runInstallHooks(installHookOptions{
 		CLI:         choices.CLI,
@@ -118,6 +121,7 @@ func runSetup(opts setupOptions, version string) error {
 	fmt.Printf("  CLI references:             %s\n", choices.CLI)
 	fmt.Printf("  Contract skills:            %s\n", enabledText(choices.Skills))
 	fmt.Printf("  Install scope:              %s\n", choices.Scope)
+	fmt.Printf("  Project command:            %s\n", harnessInvocation())
 	fmt.Printf("  Open the Harness terminal: %s run --resume\n", invoke)
 	fmt.Printf("  Start a sprint:             %s sprint new \"first goal\"\n", invoke)
 	fmt.Printf("  Agree contract:             %s contract propose && %s contract approve --role planner && %s contract approve --role tester\n", invoke, invoke, invoke)
@@ -316,6 +320,28 @@ func installGlobalCommand() error {
 		return nil
 	}
 	return fmt.Errorf("install global harness command: %w", lastErr)
+}
+
+func installProjectCommand() error {
+	if _, err := os.Stat(".harness"); err != nil {
+		return nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate current harness executable: %w", err)
+	}
+	dir := filepath.Join(".harness", "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	dest := filepath.Join(dir, executableName("harness"))
+	if samePath(exe, dest) {
+		return nil
+	}
+	if err := copyFile(exe, dest, 0o755); err != nil {
+		return fmt.Errorf("install project harness command: %w", err)
+	}
+	return nil
 }
 
 func globalInstallDirs() []string {

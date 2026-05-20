@@ -49,7 +49,9 @@
 - [x] Agreement history in `.harness/` lock and approval artifacts
 - [x] Contract review skill for independent tester/reviewer role
 - [x] Keep Harness deterministic: agents write approvals, Harness verifies state
-- [ ] Optional provider-specific agent launch helpers for Claude Code Agent View and Codex subagents
+- [x] Codex project hooks and custom agents for contract author/reviewer flow
+- [x] Claude Code project subagents and edit guard for contract-first flow
+- [ ] Optional provider-specific launch commands for opening Claude Agent View / Codex agent UI
 
 ## v0.5 - Broader Stack Coverage
 

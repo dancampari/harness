@@ -57,6 +57,11 @@ a guided install, or --cli codex|claude|cursor|all|none in scripts.`,
 }
 
 func runInstallHooks(opts installHookOptions) error {
+	if _, err := os.Stat(".harness"); err == nil {
+		if err := installProjectCommand(); err != nil {
+			return err
+		}
+	}
 	project := detect.DetectProject(".")
 	targets, err := resolveHookTargets(opts, project)
 	if err != nil {
@@ -205,6 +210,11 @@ func installClaudeHooks(skillsEnabled bool) error {
 	if err := installClaudeMemory(skillsEnabled); err != nil {
 		return err
 	}
+	if skillsEnabled {
+		if err := installClaudeAgents(); err != nil {
+			return err
+		}
+	}
 	dir := ".claude"
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -218,6 +228,7 @@ func installClaudeHooks(skillsEnabled bool) error {
 	}
 	hooks := objectValue(settings, "hooks")
 	invoke := harnessInvocation()
+	appendClaudeHook(hooks, "PreToolUse", "Edit|MultiEdit|Write", invoke+" guard pre-tool")
 	appendClaudeHook(hooks, "Stop", "*", invoke+" sprint qa --format=json")
 	appendClaudeHook(hooks, "PostToolUse", "Bash(git commit*)", invoke+" sprint qa --format=tty")
 
@@ -230,6 +241,23 @@ func installClaudeHooks(skillsEnabled bool) error {
 		return err
 	}
 	fmt.Println("  OK Claude Code references installed: CLAUDE.md,", path)
+	return nil
+}
+
+func installClaudeAgents() error {
+	dir := filepath.Join(".claude", "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	files := map[string]string{
+		filepath.Join(dir, "harness-contract-author.md"):   claudeContractAuthorAgent,
+		filepath.Join(dir, "harness-contract-reviewer.md"): claudeContractReviewerAgent,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -301,8 +329,97 @@ func installCodexHooks(skillsEnabled bool) error {
 	if err := os.WriteFile(path, []byte(addendum), 0o644); err != nil {
 		return err
 	}
-	fmt.Println("  OK Codex references installed:", path)
+	if err := installCodexHookConfig(); err != nil {
+		return err
+	}
+	if skillsEnabled {
+		if err := installCodexAgents(); err != nil {
+			return err
+		}
+	}
+	fmt.Println("  OK Codex references installed:", path, ".codex/hooks.json")
 	return nil
+}
+
+func installCodexHookConfig() error {
+	dir := ".codex"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "hooks.json")
+	hooks := map[string]any{}
+	if existing, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(existing))) > 0 {
+		if err := json.Unmarshal(existing, &hooks); err != nil {
+			return fmt.Errorf("parse existing %s: %w", path, err)
+		}
+	}
+	root := objectValue(hooks, "hooks")
+	appendCodexHook(root, "PreToolUse", "apply_patch|Edit|MultiEdit|Write", harnessInvocation()+" guard pre-tool")
+	content, err := json.MarshalIndent(hooks, "", "  ")
+	if err != nil {
+		return err
+	}
+	content = append(content, '\n')
+	return os.WriteFile(path, content, 0o644)
+}
+
+func appendCodexHook(hooks map[string]any, event, matcher, command string) {
+	entries, _ := hooks[event].([]any)
+	for i, entry := range entries {
+		entryMap, ok := entry.(map[string]any)
+		if !ok || fmt.Sprint(entryMap["matcher"]) != matcher {
+			continue
+		}
+		hookList, _ := entryMap["hooks"].([]any)
+		for _, hook := range hookList {
+			hookMap, ok := hook.(map[string]any)
+			if ok && fmt.Sprint(hookMap["command"]) == command {
+				return
+			}
+		}
+		entryMap["hooks"] = append(hookList, map[string]any{
+			"type":    "command",
+			"command": command,
+			"timeout": 10,
+		})
+		entries[i] = entryMap
+		hooks[event] = entries
+		return
+	}
+	hooks[event] = append(entries, map[string]any{
+		"matcher": matcher,
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": command,
+			"timeout": 10,
+		}},
+	})
+}
+
+func installCodexAgents() error {
+	dir := filepath.Join(".codex", "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	files := map[string]string{
+		filepath.Join(dir, "harness-contract-author.toml"):   codexContractAuthorAgent,
+		filepath.Join(dir, "harness-contract-reviewer.toml"): codexContractReviewerAgent,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+	configPath := filepath.Join(".codex", "config.toml")
+	if existing, err := os.ReadFile(configPath); err == nil {
+		text := string(existing)
+		if !strings.Contains(text, "[agents]") {
+			text = strings.TrimRight(text, "\r\n") + "\n\n[agents]\nmax_threads = 4\nmax_depth = 1\n"
+			return os.WriteFile(configPath, []byte(text), 0o644)
+		}
+		return nil
+	}
+	return os.WriteFile(configPath, []byte("[agents]\nmax_threads = 4\nmax_depth = 1\n"), 0o644)
 }
 
 func replaceMarkdownSection(source, heading, replacement string) string {
@@ -354,10 +471,27 @@ exit 0
 }
 
 func harnessInvocation() string {
+	local := filepath.Join(".harness", "bin", executableName("harness"))
+	localInvoke := ""
+	if _, err := os.Stat(local); err == nil {
+		localInvoke = "./" + filepath.ToSlash(local)
+	}
 	if value := strings.TrimSpace(os.Getenv("HARNESS_INVOKE")); value != "" {
+		if localInvoke != "" && isNpxHarnessInvocation(value) {
+			return localInvoke
+		}
 		return value
 	}
+	if localInvoke != "" {
+		return "./" + filepath.ToSlash(local)
+	}
 	return "harness"
+}
+
+func isNpxHarnessInvocation(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(value, "npx github:dancampari/harness#") ||
+		strings.HasPrefix(value, "npx @dancampari/harness")
 }
 
 func codexAddendum(invoke string, skillsEnabled bool) string {
@@ -394,20 +528,27 @@ Autonomous protocol:
    - Deliverables (files + symbols expected)
    - Acceptance Criteria (with thresholds 1-10)
    - Constraints (forbidden imports, complexity limits)
-6. Run ` + "`" + invoke + ` contract propose` + "`" + ` and wait until ` + "`" + invoke + ` contract status` + "`" + `
+6. If Codex custom agents are available, delegate contract creation/repair to
+   harness_contract_author and delegate independent review to
+   harness_contract_reviewer. If a subagent rejects the contract, do not edit
+   product files; route back to harness_contract_author until tester approves.
+7. Run ` + "`" + invoke + ` contract propose` + "`" + ` and wait until ` + "`" + invoke + ` contract status` + "`" + `
    returns AGREED. Planner and tester roles must approve the same hash.
-7. Implement the feature only after agreement.
-8. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+8. Implement the feature only after agreement. If status is DRAFT, PROPOSED,
+   CHANGED, REJECTED, MISSING, STALE, or BLOCKED, product-file edits are
+   forbidden.
+9. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
    without waiting for the user.
-9. Read .harness/reports/latest.json. If the verdict is FAIL or any
+10. Read .harness/reports/latest.json. If the verdict is FAIL or any
    high/critical findings exist, fix them and rerun QA.
-10. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the task complete.
+11. Run ` + "`" + invoke + ` sprint score` + "`" + ` before declaring the task complete.
 
 Only ask the user for product decisions, acceptance-criteria changes, dependency
 installation approval when it changes the project stack, or visual baseline
 approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `.
 
-Never declare a task done without a passing QA verdict from Harness.
+Never run ` + "`" + invoke + ` sprint qa --allow-unagreed` + "`" + ` unless the user explicitly asks for an emergency override.
+Never declare a task done without a passing, non-stale QA verdict from Harness.
 `
 }
 
@@ -491,9 +632,20 @@ Before creating or editing a sprint contract, read:
 
 Use that skill to decompose the user's prompt into small sprints, create the
 current sprint contract, fill the Markdown completely, propose the hash, and
-route it through planner/tester agreement. Do not ask the user to write the
-contract by hand. Ask only the smallest product question when the request is
-too ambiguous to make objective acceptance criteria.`
+route it through planner/tester agreement.
+
+When running in Codex and .codex/agents exists, use:
+- harness_contract_author for contract creation and repair.
+- harness_contract_reviewer for independent tester approval or rejection.
+
+When running in Claude Code and .claude/agents exists, use:
+- harness-contract-author for contract creation and repair.
+- harness-contract-reviewer for independent tester approval or rejection.
+
+Do not ask the user to write the contract by hand. Ask only the smallest
+product question when the request is too ambiguous to make objective acceptance
+criteria. If the reviewer rejects the contract, fix the contract first; product
+files must remain untouched until contract status is AGREED.`
 	}
 	return `Contract automation skills are disabled.
 
@@ -514,3 +666,93 @@ func cursorContractAutomationProtocol(enabled bool) string {
    contracts unless the user explicitly asks for automation.
 `
 }
+
+const codexContractAuthorAgent = `name = "harness_contract_author"
+description = "MUST BE USED in Harness projects before implementation when a sprint contract is missing, DRAFT, CHANGED, or REJECTED. Creates or repairs .harness/contracts/sprint-NNN.md only."
+sandbox_mode = "workspace-write"
+
+developer_instructions = """
+You are the Harness contract author/planner.
+
+Your only job is to transform the user's request into a small, testable Harness sprint contract or repair a rejected/weak contract.
+
+Rules:
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/contract-authoring/SKILL.md.
+- Do not edit product/application files.
+- Edit only .harness/contracts/sprint-NNN.md and, when useful, .harness/progress.md.
+- Keep the sprint small and objective.
+- Include concrete deliverables, acceptance criteria with thresholds, and constraints.
+- Run harness contract propose after writing the contract.
+- Approve only the planner role when the contract is complete: harness contract approve --role planner.
+- If tester rejects the contract, repair the contract, propose the new hash, and approve planner again.
+- Never run harness sprint qa --allow-unagreed.
+- Never implement before harness contract status returns AGREED.
+"""
+`
+
+const codexContractReviewerAgent = `name = "harness_contract_reviewer"
+description = "MUST BE USED in Harness projects after contract proposal and before implementation. Reviews the exact sprint contract hash and approves tester or rejects with a specific reason."
+sandbox_mode = "read-only"
+
+developer_instructions = """
+You are the independent Harness tester/reviewer.
+
+Your job is to decide whether the proposed sprint contract is good enough for implementation.
+
+Rules:
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, .harness/skills/contract-review/SKILL.md, and the current .harness/contracts/sprint-NNN.md.
+- Review only the contract. Do not edit files.
+- Run harness contract status.
+- If the contract is DRAFT or CHANGED, tell the parent agent to use harness_contract_author and propose the contract.
+- Reject weak or vague contracts with: harness contract reject --role tester --reason "<specific issue>".
+- Approve only if the contract is small, objective, testable, and aligned with the product spec: harness contract approve --role tester.
+- Never approve a contract that lowers criteria just to make QA easy.
+- Never implement code.
+"""
+`
+
+const claudeContractAuthorAgent = `---
+name: harness-contract-author
+description: MUST BE USED before implementation in Harness projects when a sprint contract is missing, DRAFT, CHANGED, or REJECTED. Creates or repairs .harness/contracts/sprint-NNN.md only.
+tools: Read, Grep, Glob, Bash, Edit, Write
+model: inherit
+---
+
+You are the Harness contract author/planner.
+
+Your only job is to transform the user's request into a small, testable Harness sprint contract or repair a rejected/weak contract.
+
+Rules:
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/contract-authoring/SKILL.md.
+- Do not edit product/application files.
+- Edit only .harness/contracts/sprint-NNN.md and, when useful, .harness/progress.md.
+- Keep the sprint small and objective.
+- Include concrete deliverables, acceptance criteria with thresholds, and constraints.
+- Run harness contract propose after writing the contract.
+- Approve only the planner role when the contract is complete: harness contract approve --role planner.
+- If tester rejects the contract, repair the contract, propose the new hash, and approve planner again.
+- Never run harness sprint qa --allow-unagreed.
+- Never implement before harness contract status returns AGREED.
+`
+
+const claudeContractReviewerAgent = `---
+name: harness-contract-reviewer
+description: MUST BE USED after contract proposal and before implementation in Harness projects. Reviews the exact sprint contract hash and approves tester or rejects with a specific reason.
+tools: Read, Grep, Glob, Bash
+model: inherit
+---
+
+You are the independent Harness tester/reviewer.
+
+Your job is to decide whether the proposed sprint contract is good enough for implementation.
+
+Rules:
+- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, .harness/skills/contract-review/SKILL.md, and the current .harness/contracts/sprint-NNN.md.
+- Review only the contract. Do not edit files.
+- Run harness contract status.
+- If the contract is DRAFT or CHANGED, tell the parent agent to use harness-contract-author and propose the contract.
+- Reject weak or vague contracts with: harness contract reject --role tester --reason "<specific issue>".
+- Approve only if the contract is small, objective, testable, and aligned with the product spec: harness contract approve --role tester.
+- Never approve a contract that lowers criteria just to make QA easy.
+- Never implement code.
+`
