@@ -79,11 +79,20 @@ type ActivityEvent struct {
 	Metadata  map[string]any `json:"metadata"`
 }
 
+// SkillState is what the TUI Skills tab renders.
+//
+// Active lists the skills installed under .harness/skills/ that the
+// generated agent docs actively instruct Codex/Claude Code/Cursor to
+// read. These are the only entries that are real skills.
+//
+// Adapters lists sensor adapter names from .harness/config.yaml. They
+// are not skills; they are the tools the evaluator invokes during
+// QA. The TUI surfaces them in the same view so users see the full
+// inventory of what Harness can do, but the two are rendered under
+// separate sections so the distinction is unambiguous.
 type SkillState struct {
-	Active     []string
-	Suggested  []string
-	Categories []string
-	Adapters   []string
+	Active   []string
+	Adapters []string
 }
 
 type DoctorState struct {
@@ -652,29 +661,22 @@ func loadSkillState(harnessDir string) SkillState {
 	skillsDir := filepath.Join(harnessDir, "skills")
 	if entries, err := os.ReadDir(skillsDir); err == nil {
 		for _, entry := range entries {
-			if entry.IsDir() {
+			if !entry.IsDir() {
+				continue
+			}
+			// A directory only counts as an installed skill when it
+			// carries a SKILL.md. This avoids listing leftover folders
+			// (.harness/skills/.cache, etc.) as if they were skills.
+			if _, err := os.Stat(filepath.Join(skillsDir, entry.Name(), "SKILL.md")); err == nil {
 				active = append(active, entry.Name())
 			}
 		}
 	}
 	cfg, _ := config.Load(filepath.Join(harnessDir, "config.yaml"))
 	return SkillState{
-		Active:     active,
-		Suggested:  suggestedSkills(cfg),
-		Categories: []string{"contract", "spec-driven", "validation", "repair"},
-		Adapters:   cfg.AllAdapterNames(),
+		Active:   active,
+		Adapters: cfg.AllAdapterNames(),
 	}
-}
-
-func suggestedSkills(cfg config.Config) []string {
-	var out []string
-	if cfg.Stack == "node" || cfg.Stack == "typescript" {
-		out = append(out, "spec-driven", "contract-review", "approved-fixtures")
-	}
-	if len(out) == 0 {
-		out = append(out, "contract-authoring", "contract-review")
-	}
-	return out
 }
 
 func loadDoctorState(harnessDir, projectRoot string) DoctorState {
