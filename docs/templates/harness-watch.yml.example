@@ -1,0 +1,46 @@
+# Harness drift-watch schedule.
+#
+# Copy to .github/workflows/harness-watch.yml to enable continuous
+# drift monitoring outside the sprint lifecycle. The job runs the fast
+# sensor set plus configured audit adapters (npm-audit, pip-audit,
+# govulncheck, cargo-audit) every six hours and fails when the number
+# of findings regresses versus the previous run.
+#
+# This workflow is intentionally separate from your PR / push CI: it
+# detects drift that lands between commits (a new CVE published in an
+# upstream dependency, a config file edited outside the agent's view,
+# etc.).
+
+name: harness-watch
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install harness
+        run: npm install --global @dancampari/harness@latest
+        # Or, while pre-release:
+        # run: npx github:dancampari/harness#vX.Y.Z --help
+
+      - name: Run drift watch
+        run: harness watch once --fail-on-regression --format=tty
+
+      - name: Upload watch reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-watch-reports
+          path: .harness/watch
+          retention-days: 30

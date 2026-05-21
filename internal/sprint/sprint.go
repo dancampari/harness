@@ -32,6 +32,8 @@ import (
 	"github.com/dancampari/harness/internal/evaluator"
 	"github.com/dancampari/harness/internal/memory"
 	"github.com/dancampari/harness/internal/planner"
+	"github.com/dancampari/harness/internal/sensors"
+	"github.com/dancampari/harness/internal/workspace"
 )
 
 // Manager coordinates the sprint lifecycle for one project.
@@ -54,7 +56,20 @@ func NewManager(harnessDir string) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := db.Migrate(); err != nil {
+		return nil, fmt.Errorf("migrate memory: %w", err)
+	}
 	return &Manager{root: harnessDir, cfg: cfg, mem: db}, nil
+}
+
+// Close releases the underlying memory database. Production callers can
+// usually rely on process exit, but tests and long-running services should
+// call Close so file handles do not leak.
+func (m *Manager) Close() error {
+	if m == nil || m.mem == nil {
+		return nil
+	}
+	return m.mem.Close()
 }
 
 // NewContract creates the next sprint contract from a goal.
@@ -150,6 +165,25 @@ func (m *Manager) Status() (Status, error) {
 // separation. There is no way for the subprocess to be influenced by
 // the parent's prior state.
 func (m *Manager) RunQA(acceptScreenshots, acceptFixtures bool) (*QAResult, error) {
+	return m.RunQAWith(QAOptions{
+		AcceptScreenshots: acceptScreenshots,
+		AcceptFixtures:    acceptFixtures,
+	})
+}
+
+// QAOptions controls one isolated QA pass. Fast skips slow sensors so the
+// pre-commit hook can complete in seconds; full runs still use the zero
+// value to keep the existing contract.
+type QAOptions struct {
+	AcceptScreenshots bool
+	AcceptFixtures    bool
+	Fast              bool
+}
+
+// RunQAWith spawns the evaluator subprocess with explicit options. The
+// fast flag short-circuits dimensions whose configured sensors are not
+// in sensors.IsFast, marking them Skipped instead of running them.
+func (m *Manager) RunQAWith(opts QAOptions) (*QAResult, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("locate harness binary: %w", err)
@@ -159,14 +193,22 @@ func (m *Manager) RunQA(acceptScreenshots, acceptFixtures bool) (*QAResult, erro
 		return nil, fmt.Errorf("resolve repo root: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 16*time.Minute)
+	timeout := 16 * time.Minute
+	if opts.Fast {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, exe, "sprint", "qa", "--internal")
+	args := []string{"sprint", "qa", "--internal"}
+	if opts.Fast {
+		args = append(args, "--fast")
+	}
+	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Stdin = nil        // sever any inherited stdin (no terminal access)
 	cmd.Stderr = os.Stderr // forward subprocess diagnostics
 	cmd.Dir = repoRoot     // explicit working dir, not inherited
-	cmd.Env = isolatedEvaluatorEnv(repoRoot, acceptScreenshots, acceptFixtures)
+	cmd.Env = isolatedEvaluatorEnv(repoRoot, opts.AcceptScreenshots, opts.AcceptFixtures)
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -206,10 +248,21 @@ func (m *Manager) RunQA(acceptScreenshots, acceptFixtures bool) (*QAResult, erro
 // artifacts exist even if the parent crashes between subprocess exit
 // and result rendering.
 func (m *Manager) RunQAInternal(stdout io.Writer, acceptScreenshots, acceptFixtures bool) error {
-	if acceptScreenshots {
+	return m.RunQAInternalWith(stdout, QAOptions{
+		AcceptScreenshots: acceptScreenshots,
+		AcceptFixtures:    acceptFixtures,
+	})
+}
+
+// RunQAInternalWith is the child-side worker for the parent's RunQAWith.
+// Fast runs filter the configured sensors to fast-only and write
+// reports/evaluations exactly like a full run does, except dimensions
+// without a fast sensor are marked Skipped.
+func (m *Manager) RunQAInternalWith(stdout io.Writer, opts QAOptions) error {
+	if opts.AcceptScreenshots {
 		_ = os.Setenv("HARNESS_ACCEPT_SCREENSHOTS", "1")
 	}
-	if acceptFixtures {
+	if opts.AcceptFixtures {
 		_ = os.Setenv("HARNESS_ACCEPT_FIXTURES", "1")
 	}
 	n, err := m.currentSprintNumber()
@@ -232,23 +285,33 @@ func (m *Manager) RunQAInternal(stdout io.Writer, acceptScreenshots, acceptFixtu
 
 	check := contract.CheckAgainstDiff(repoRoot)
 	ev := evaluator.New(m.cfg, adapters.BuildRegistry())
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	runTimeout := 15 * time.Minute
+	if opts.Fast {
+		runTimeout = 90 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	result, err := ev.Evaluate(ctx, repoRoot, n, check)
+	result, err := ev.EvaluateWith(ctx, repoRoot, n, check, evaluator.Options{Fast: opts.Fast})
 	if err != nil {
 		return err
 	}
 
-	if err := m.writeEvaluationMarkdown(n, contract, result); err != nil {
-		return err
-	}
-	if err := m.writeJSONReport(n, result); err != nil {
-		return err
-	}
-	if result.Verdict == "PASS" {
-		_ = m.clearRepairBrief(n)
-	} else if _, err := m.writeRepairBriefFromResult(n, result); err != nil {
-		return err
+	// Fast runs are informational shift-left checks. They must not
+	// overwrite the full QA report artifacts that score consolidation
+	// relies on, so emit the JSON to stdout and skip writing reports,
+	// evaluations, and repair briefs to disk.
+	if !opts.Fast {
+		if err := m.writeEvaluationMarkdown(n, contract, result); err != nil {
+			return err
+		}
+		if err := m.writeJSONReport(n, result); err != nil {
+			return err
+		}
+		if result.Verdict == "PASS" {
+			_ = m.clearRepairBrief(n)
+		} else if _, err := m.writeRepairBriefFromResult(n, result); err != nil {
+			return err
+		}
 	}
 
 	// Emit ONLY the result as JSON on stdout. The parent depends on
@@ -391,6 +454,16 @@ func (m *Manager) Consolidate(allowFail bool) (*ConsolidatedReport, error) {
 	if !ag.ReportIsCurrent(ev.Timestamp) {
 		return nil, fmt.Errorf("contract agreement required before scoring: sprint %03d report is stale or unagreed; run contract propose/approve, then rerun harness sprint qa",
 			n)
+	}
+	if ev.Process.WorkspaceSHA != "" {
+		repoRoot, repoErr := filepath.Abs(filepath.Dir(m.root))
+		if repoErr == nil {
+			currentSHA, hashErr := workspace.Hash(repoRoot)
+			if hashErr == nil && currentSHA != ev.Process.WorkspaceSHA {
+				return nil, fmt.Errorf("workspace changed after QA for sprint %03d: rerun harness sprint qa before consolidating; report SHA=%s current SHA=%s",
+					n, shortSHA(ev.Process.WorkspaceSHA), shortSHA(currentSHA))
+			}
+		}
 	}
 	if ev.Verdict != "PASS" && !allowFail {
 		if _, err := m.writeRepairBriefFromResult(n, &ev); err != nil {
@@ -718,6 +791,7 @@ func (m *Manager) renderRepairBrief(n int, r *evaluator.EvaluationResult) string
 	fmt.Fprintf(&sb, "## Findings\n")
 	fmt.Fprintf(&sb, "| Severity | Dimension | Rule | Location | Action |\n")
 	fmt.Fprintf(&sb, "|---|---|---|---|---|\n")
+	hintsSeen := map[string]string{}
 	for _, f := range flat {
 		fmt.Fprintf(&sb, "| %s | %s | %s | %s | %s |\n",
 			escapeTable(f.severity),
@@ -726,8 +800,26 @@ func (m *Manager) renderRepairBrief(n int, r *evaluator.EvaluationResult) string
 			escapeTable(f.location),
 			escapeTable(repairAction(f)),
 		)
+		if f.hint != "" {
+			hintsSeen[f.rule] = f.hint
+		}
 	}
 	fmt.Fprintln(&sb)
+
+	// Agent-readable hint catalog. We dedupe by rule so a sprint with
+	// 50 lint findings does not repeat the same Suggested fix 50 times.
+	if len(hintsSeen) > 0 {
+		fmt.Fprintf(&sb, "## Suggested Fixes (LLM-optimized)\n\n")
+		ruleOrder := make([]string, 0, len(hintsSeen))
+		for rule := range hintsSeen {
+			ruleOrder = append(ruleOrder, rule)
+		}
+		sort.Strings(ruleOrder)
+		for _, rule := range ruleOrder {
+			fmt.Fprintf(&sb, "- **%s** — %s\n", rule, hintsSeen[rule])
+		}
+		fmt.Fprintln(&sb)
+	}
 
 	if humanApprovalRequired(flat) {
 		fmt.Fprintf(&sb, "## User Approval Required\n")
@@ -757,6 +849,7 @@ type repairFinding struct {
 	rule      string
 	location  string
 	message   string
+	hint      string
 }
 
 func flattenedFindings(r *evaluator.EvaluationResult) []repairFinding {
@@ -769,6 +862,7 @@ func flattenedFindings(r *evaluator.EvaluationResult) []repairFinding {
 				rule:      "missing-deliverable",
 				location:  "-",
 				message:   item,
+				hint:      sensors.LLMHint("missing-deliverable"),
 			})
 		}
 		for _, item := range r.ContractCheck.UnmetCriteria {
@@ -778,6 +872,7 @@ func flattenedFindings(r *evaluator.EvaluationResult) []repairFinding {
 				rule:      "unmet-criterion",
 				location:  "-",
 				message:   item,
+				hint:      sensors.LLMHint("unmet-criterion"),
 			})
 		}
 	}
@@ -796,6 +891,7 @@ func flattenedFindings(r *evaluator.EvaluationResult) []repairFinding {
 				rule:      f.Rule,
 				location:  filepath.ToSlash(location),
 				message:   f.Message,
+				hint:      f.Hint,
 			})
 		}
 	}
@@ -888,6 +984,13 @@ func repairSevRank(severity string) int {
 	default:
 		return 0
 	}
+}
+
+func shortSHA(sha string) string {
+	if len(sha) > 12 {
+		return sha[:12]
+	}
+	return sha
 }
 
 func extractDimScores(dims map[string]evaluator.DimensionScore) map[string]int {

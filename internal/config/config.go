@@ -17,6 +17,7 @@ const (
 	DimBehavior     = "behavior"
 	DimContract     = "contract"
 	DimE2E          = "e2e"
+	DimReview       = "review"
 )
 
 // Config is the root configuration for a project's harness.
@@ -30,6 +31,26 @@ type Config struct {
 	Weights    DimensionWeights `yaml:"weights"`
 	E2E        E2EConfig        `yaml:"e2e"`
 	Memory     MemoryConfig     `yaml:"memory"`
+	Review     ReviewConfig     `yaml:"review,omitempty"`
+}
+
+// ReviewConfig configures the optional external inferential reviewer.
+// When Command is empty (the default), the review dimension stays
+// inactive and Harness never spawns an LLM-backed reviewer subprocess.
+//
+// Example .harness/config.yaml entry that opts in to a Claude Code
+// agent acting as the output reviewer:
+//
+//	review:
+//	  command: ["claude", "code", "--agent", "harness-output-reviewer"]
+//	  timeout_seconds: 600
+//
+// The configured command receives a JSON input bundle on stdin and is
+// expected to emit a JSON findings array on stdout. See
+// internal/adapters/external_reviewer.go for the schema.
+type ReviewConfig struct {
+	Command        []string `yaml:"command,omitempty"`
+	TimeoutSeconds int      `yaml:"timeout_seconds,omitempty"`
 }
 
 // AdaptersConfig lists which tool adapters are enabled for this project.
@@ -44,6 +65,7 @@ type AdaptersConfig struct {
 	Architecture []string `yaml:"architecture"`
 	Behavior     []string `yaml:"behavior"`
 	E2E          []string `yaml:"e2e"`
+	Review       []string `yaml:"review,omitempty"`
 }
 
 // ThresholdsConfig defines minimum acceptable values per dimension.
@@ -57,6 +79,7 @@ type ThresholdsConfig struct {
 	Behavior     int `yaml:"behavior"`
 	Contract     int `yaml:"contract"`
 	E2E          int `yaml:"e2e"`
+	Review       int `yaml:"review,omitempty"`
 }
 
 // DimensionWeights are used to compute the total score as a weighted average.
@@ -70,6 +93,7 @@ type DimensionWeights struct {
 	Behavior     int `yaml:"behavior"`
 	Contract     int `yaml:"contract"`
 	E2E          int `yaml:"e2e"`
+	Review       int `yaml:"review,omitempty"`
 }
 
 // E2EConfig controls end-to-end testing behavior. Killing "Teste Fake"
@@ -102,6 +126,7 @@ func (c Config) ActiveDimensions() []string {
 		DimBehavior,
 		DimContract,
 		DimE2E,
+		DimReview,
 	}
 	var out []string
 	for _, dim := range order {
@@ -124,6 +149,7 @@ func (c Config) Validate() []string {
 		DimBehavior,
 		DimContract,
 		DimE2E,
+		DimReview,
 	} {
 		th := c.ThresholdFor(dim)
 		wt := c.WeightFor(dim)
@@ -159,6 +185,8 @@ func (c Config) ThresholdFor(dim string) int {
 		return c.Thresholds.Contract
 	case DimE2E:
 		return c.Thresholds.E2E
+	case DimReview:
+		return c.Thresholds.Review
 	}
 	return 0
 }
@@ -181,6 +209,8 @@ func (c Config) WeightFor(dim string) int {
 		return c.Weights.Contract
 	case DimE2E:
 		return c.Weights.E2E
+	case DimReview:
+		return c.Weights.Review
 	}
 	return 0
 }
@@ -201,6 +231,8 @@ func (c Config) AdapterNamesForDimension(dim string) []string {
 		return copyStrings(c.Adapters.Behavior)
 	case DimE2E:
 		return copyStrings(c.Adapters.E2E)
+	case DimReview:
+		return copyStrings(c.Adapters.Review)
 	}
 	return nil
 }
@@ -216,6 +248,7 @@ func (c Config) AllAdapterNames() []string {
 		DimArchitecture,
 		DimBehavior,
 		DimE2E,
+		DimReview,
 	} {
 		for _, name := range c.AdapterNamesForDimension(dim) {
 			if name == "" || seen[name] {

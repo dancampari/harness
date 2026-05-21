@@ -78,12 +78,19 @@ func newSprintQACmd() *cobra.Command {
 	var acceptScreenshots bool
 	var acceptFixtures bool
 	var allowUnagreed bool
+	var fast bool
 	cmd := &cobra.Command{
 		Use:   "qa",
 		Short: "Run the Evaluator (isolated subprocess) on the current sprint",
 		Long: `Spawns the Evaluator in a separate process with a clean context.
 It receives only the contract and the diff. It cannot see how the build
 happened. This is the 'verificação real' from problem 5 of the video.
+
+The --fast flag is the shift-left mode used by the pre-commit hook: it
+filters out tests, coverage, audit, and browser sensors so feedback
+returns in seconds. Dimensions without a fast sensor are reported as
+SKIPPED, do not contribute to verdict or score, and do not overwrite
+the full QA report on disk.
 
 The --internal flag is reserved for the spawned subprocess itself. End
 users never pass it; the parent process sets it when forking.`,
@@ -92,32 +99,49 @@ users never pass it; the parent process sets it when forking.`,
 			if err != nil {
 				return err
 			}
+			opts := sprint.QAOptions{
+				AcceptScreenshots: acceptScreenshots,
+				AcceptFixtures:    acceptFixtures,
+				Fast:              fast,
+			}
 			if internal {
 				// We are the spawned subprocess. Do the work and emit
 				// the EvaluationResult as JSON on stdout. Nothing else
 				// may go to stdout (the parent depends on parseable JSON).
-				return mgr.RunQAInternal(os.Stdout, acceptScreenshots, acceptFixtures)
+				return mgr.RunQAInternalWith(os.Stdout, opts)
 			}
-			if !allowUnagreed {
+			// Fast mode is informational and used by pre-commit. The
+			// agreement gate only protects the canonical full QA loop.
+			if !allowUnagreed && !fast {
 				if err := agreement.NewManager(".harness").EnsureAgreed(0); err != nil {
 					return err
 				}
 			}
 			// We are the parent. Spawn the subprocess and render.
-			result, err := mgr.RunQA(acceptScreenshots, acceptFixtures)
+			result, err := mgr.RunQAWith(opts)
 			if err != nil {
 				return err
 			}
 			switch format {
 			case "json":
-				return result.WriteJSON(os.Stdout)
+				if err := result.WriteJSON(os.Stdout); err != nil {
+					return err
+				}
 			default:
 				if err := result.WriteTTY(os.Stdout); err != nil {
 					return err
 				}
-				openReportIfInteractive(result.EvaluationPath())
-				return nil
+				if !fast {
+					openReportIfInteractive(result.EvaluationPath())
+				}
 			}
+			// Fast mode is consumed by pre-commit, so FAIL must propagate
+			// as a non-zero exit code; the report is already written, the
+			// hook only needs the signal.
+			if fast && result.Verdict() == "FAIL" {
+				return fmt.Errorf("fast QA returned FAIL; fix findings or commit with --no-verify to bypass")
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", autoFormat(), "output format: tty|json")
@@ -127,6 +151,8 @@ users never pass it; the parent process sets it when forking.`,
 		"accept current approved-fixture command outputs after human review")
 	cmd.Flags().BoolVar(&allowUnagreed, "allow-unagreed", false,
 		"explicitly run QA before multi-agent contract agreement")
+	cmd.Flags().BoolVar(&fast, "fast", false,
+		"shift-left mode: run only fast static-analysis sensors; safe for pre-commit")
 	cmd.Flags().BoolVar(&internal, "internal", false,
 		"internal use only: act as the isolated evaluator subprocess")
 	_ = cmd.Flags().MarkHidden("internal")

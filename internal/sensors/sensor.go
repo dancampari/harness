@@ -39,6 +39,10 @@ const (
 	DimBehavior     Dimension = "behavior"
 	DimContract     Dimension = "contract"
 	DimE2E          Dimension = "e2e"
+	// DimReview is fed by the optional external inferential reviewer.
+	// Disabled by default. Sensors in this dimension shell out to an
+	// LLM-backed CLI; Harness never embeds a model.
+	DimReview Dimension = "review"
 )
 
 // Finding is the raw output of a sensor. The Evaluator aggregates findings
@@ -50,6 +54,12 @@ type Finding struct {
 	Line      int       `json:"line,omitempty"`
 	Rule      string    `json:"rule"`
 	Message   string    `json:"message"`
+	// Hint is an optional "positive prompt injection" addendum: a short,
+	// agent-readable Suggested fix / Do NOT pair for the rule. It is
+	// surfaced in JSON reports and the repair brief but intentionally
+	// omitted from the compact TTY output so humans see only the raw
+	// linter message. See internal/sensors.LLMHint for the catalog.
+	Hint string `json:"hint,omitempty"`
 	// Fingerprint is a stable hash that identifies the SAME logical issue
 	// across runs. The harness uses it to detect recurring problems
 	// (the AI Slop accumulation from problem 6 of the video).
@@ -129,4 +139,50 @@ func (r *Registry) Available(root string) []Sensor {
 		}
 	}
 	return out
+}
+
+// fastSensorNames lists adapters that complete in seconds and never
+// require network or browser. These are the sensors the pre-commit
+// shift-left hook can safely run on every git commit. Tests, coverage,
+// dependency audit, browser e2e, and external CLI fixtures are all
+// excluded so commits stay quick.
+//
+// Adding a new fast sensor: extend this map. Slow sensors do not need
+// to declare anything; the default is slow.
+var fastSensorNames = map[string]bool{
+	"eslint":          true,
+	"ruff":            true,
+	"mypy":            true,
+	"go-vet":          true,
+	"staticcheck":     true,
+	"clippy":          true,
+	"js-architecture": true,
+	"js-complexity":   true,
+}
+
+// IsFast reports whether the sensor with the given name is safe to run
+// inside the fast-feedback pre-commit loop.
+func IsFast(name string) bool {
+	return fastSensorNames[name]
+}
+
+// auditSensorNames lists dependency-vulnerability adapters. These do not
+// belong in the pre-commit loop (they require network and can be slow)
+// but they are the centerpiece of `harness watch`, which monitors drift
+// between sprints. Audit findings often change without any code change
+// (a new CVE published upstream invalidates a dependency that was clean
+// last week), so they need their own cadence outside the sprint cycle.
+var auditSensorNames = map[string]bool{
+	"npm-audit":   true,
+	"pip-audit":   true,
+	"cargo-audit": true,
+	"govulncheck": true,
+}
+
+// IsAudit reports whether the sensor with the given name is a
+// dependency-vulnerability audit. Used by `harness watch` to include
+// audits in the periodic drift check even though they are not fast
+// enough for pre-commit.
+func IsAudit(name string) bool {
+	return auditSensorNames[name]
 }

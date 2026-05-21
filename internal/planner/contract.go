@@ -27,28 +27,71 @@ import (
 	"github.com/dancampari/harness/internal/evaluator"
 )
 
+// Size classifies the sprint's scope so the planning policy can decide
+// when design and task artifacts are mandatory. Small sprints stay
+// lightweight; large sprints force explicit decomposition.
+//
+// Valid values: "small", "medium", "large". An empty Size defaults to
+// "medium" at policy time.
+type Size string
+
+const (
+	SizeSmall  Size = "small"
+	SizeMedium Size = "medium"
+	SizeLarge  Size = "large"
+)
+
 // Contract is the parsed structure of a contracts/sprint-NNN.md file.
 type Contract struct {
 	SprintNumber int
 	Title        string
 	Goal         string
+	Size         Size
+	Requirements []Requirement
 	Deliverables []Deliverable
 	Criteria     []AcceptanceCriterion
 	Constraints  Constraints
 	RawMarkdown  string
 }
 
+// Requirement is one entry in the optional `## Requirements` section.
+// Requirements give acceptance criteria, deliverables, and tasks a stable
+// identifier for traceability across the sprint.
+type Requirement struct {
+	ID        string // e.g. "REQ-001"
+	Statement string
+}
+
 // Deliverable is a single artifact the sprint must produce.
 type Deliverable struct {
-	Path       string
-	MustExport []string
+	Path          string
+	MustExport    []string
+	RequirementID string // optional REQ-NNN linkage
+}
+
+// Evidence describes how an acceptance criterion is mechanically verified.
+//
+// Recognised kinds:
+//   - "tests": Ref is a test name substring searched across test files.
+//   - "e2e": Ref is a path (relative to repo root) that must exist.
+//   - "fixture": Ref is the name of a JSON file under .harness/fixtures/.
+//   - "inspection": Ref is a human description; the criterion is marked as
+//     requiring manual review but does not fail mechanically.
+//
+// An empty Kind means the criterion declares no mechanical evidence; the
+// contract dimension falls back to deliverable-only structural checks.
+type Evidence struct {
+	Kind string
+	Ref  string
 }
 
 // AcceptanceCriterion is one row in the acceptance table.
 type AcceptanceCriterion struct {
-	Number    int
-	Statement string
-	Threshold int // 1-10
+	Number        int
+	RequirementID string // optional REQ-NNN linkage
+	Statement     string
+	Evidence      Evidence
+	Threshold     int // 1-10
 }
 
 // Constraints are non-functional limits the sprint must respect.
@@ -75,10 +118,14 @@ func Parse(path string) (*Contract, error) {
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
 	var section string
-	criteriaRow := regexp.MustCompile(`^\|\s*(\d+)\s*\|\s*(.+?)\s*\|\s*(\d+)/10\s*\|`)
+	criteriaRowLegacy := regexp.MustCompile(`^\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|\s*(\d+)/10\s*\|`)
+	criteriaRowFull := regexp.MustCompile(`^\|\s*(\d+)\s*\|\s*(REQ-\d+)?\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*(\d+)/10\s*\|`)
 	titleRow := regexp.MustCompile(`^#\s+Sprint\s+(\d+)\s*[—\-]\s*(.+)$`)
 	delivPath := regexp.MustCompile("^[-*]\\s+`([^`]+)`")
 	codeSpan := regexp.MustCompile("`([^`]+)`")
+	requirementRow := regexp.MustCompile(`^[-*]\s+(REQ-\d+)\s*[:\-]\s*(.+)$`)
+	delivRequirement := regexp.MustCompile(`\b(REQ-\d+)\b`)
+	sizeLine := regexp.MustCompile(`(?i)^size\s*[:=]\s*(small|medium|large)\b`)
 	forbiddenImport := regexp.MustCompile(`forbidden_imports?:\s*` + "`([^`]+)`")
 	complexityLimit := regexp.MustCompile(`max_function_complexity:\s*(\d+)`)
 	coverageMin := regexp.MustCompile(`coverage_min:\s*(\d+)`)
@@ -107,6 +154,24 @@ func Parse(path string) (*Contract, error) {
 				}
 				c.Goal += trimmed
 			}
+		case "size":
+			if m := sizeLine.FindStringSubmatch(trimmed); m != nil {
+				c.Size = Size(strings.ToLower(m[1]))
+			} else if trimmed != "" && !strings.HasPrefix(trimmed, "<") && !strings.HasPrefix(trimmed, "#") {
+				// Tolerate "small", "medium", "large" on its own line.
+				lower := strings.ToLower(trimmed)
+				switch lower {
+				case "small", "medium", "large":
+					c.Size = Size(lower)
+				}
+			}
+		case "requirements":
+			if m := requirementRow.FindStringSubmatch(trimmed); m != nil {
+				c.Requirements = append(c.Requirements, Requirement{
+					ID:        m[1],
+					Statement: strings.TrimSpace(m[2]),
+				})
+			}
 		case "deliverables":
 			if m := delivPath.FindStringSubmatch(trimmed); m != nil {
 				d := Deliverable{Path: m[1]}
@@ -115,10 +180,24 @@ func Parse(path string) (*Contract, error) {
 						d.MustExport = append(d.MustExport, span[1])
 					}
 				}
+				if rm := delivRequirement.FindStringSubmatch(trimmed); rm != nil {
+					d.RequirementID = rm[1]
+				}
 				c.Deliverables = append(c.Deliverables, d)
 			}
 		case "acceptance criteria":
-			if m := criteriaRow.FindStringSubmatch(trimmed); m != nil {
+			if m := criteriaRowFull.FindStringSubmatch(trimmed); m != nil {
+				var num, th int
+				fmt.Sscanf(m[1], "%d", &num)
+				fmt.Sscanf(m[5], "%d", &th)
+				c.Criteria = append(c.Criteria, AcceptanceCriterion{
+					Number:        num,
+					RequirementID: m[2],
+					Statement:     strings.TrimSpace(m[3]),
+					Evidence:      parseEvidence(m[4]),
+					Threshold:     th,
+				})
+			} else if m := criteriaRowLegacy.FindStringSubmatch(trimmed); m != nil {
 				var num, th int
 				fmt.Sscanf(m[1], "%d", &num)
 				fmt.Sscanf(m[3], "%d", &th)
@@ -146,8 +225,57 @@ func Parse(path string) (*Contract, error) {
 	return c, nil
 }
 
+// EffectiveSize returns the declared sprint size or an empty Size when
+// the contract did not declare one. An empty Size disables the
+// size-based policy gates so legacy contracts authored before v0.8.5
+// continue to validate without changes. New contracts get a `medium`
+// default through the template at sprint creation time.
+func (c *Contract) EffectiveSize() Size {
+	switch c.Size {
+	case SizeSmall, SizeMedium, SizeLarge:
+		return c.Size
+	default:
+		return ""
+	}
+}
+
+// parseEvidence converts a cell value into an Evidence struct. The expected
+// format is "<kind>:<ref>" with kind in {tests, e2e, fixture, inspection}.
+// An empty cell yields zero-value Evidence and is treated as "no mechanical
+// check declared" by CheckAgainstDiff.
+func parseEvidence(raw string) Evidence {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return Evidence{}
+	}
+	idx := strings.IndexByte(raw, ':')
+	if idx < 0 {
+		return Evidence{Kind: "inspection", Ref: raw}
+	}
+	kind := strings.ToLower(strings.TrimSpace(raw[:idx]))
+	ref := strings.TrimSpace(raw[idx+1:])
+	switch kind {
+	case "tests", "test":
+		return Evidence{Kind: "tests", Ref: ref}
+	case "e2e":
+		return Evidence{Kind: "e2e", Ref: ref}
+	case "fixture", "fixtures":
+		return Evidence{Kind: "fixture", Ref: ref}
+	case "inspection", "manual":
+		return Evidence{Kind: "inspection", Ref: ref}
+	default:
+		return Evidence{Kind: kind, Ref: ref}
+	}
+}
+
 // Validate checks that the contract is structurally complete.
 // It does NOT check semantics — that's outside the harness's scope.
+//
+// When `## Requirements` is present, Validate also enforces internal
+// integrity: every REQ-ID referenced by a deliverable or criterion must
+// resolve to a declared requirement, and every declared requirement must
+// be referenced at least once. Contracts without `## Requirements` keep
+// the legacy structural behavior so older sprints stay parseable.
 func (c *Contract) Validate() []string {
 	var errors []string
 	if c.SprintNumber == 0 {
@@ -169,6 +297,50 @@ func (c *Contract) Validate() []string {
 					cr.Number, cr.Threshold))
 		}
 	}
+	if len(c.Requirements) > 0 {
+		known := map[string]bool{}
+		for _, r := range c.Requirements {
+			if r.ID == "" {
+				continue
+			}
+			if known[r.ID] {
+				errors = append(errors, fmt.Sprintf("duplicate requirement %s", r.ID))
+				continue
+			}
+			known[r.ID] = true
+		}
+		referenced := map[string]bool{}
+		for _, d := range c.Deliverables {
+			if d.RequirementID == "" {
+				continue
+			}
+			if !known[d.RequirementID] {
+				errors = append(errors, fmt.Sprintf("deliverable %q references undefined %s",
+					d.Path, d.RequirementID))
+				continue
+			}
+			referenced[d.RequirementID] = true
+		}
+		for _, cr := range c.Criteria {
+			if cr.RequirementID == "" {
+				continue
+			}
+			if !known[cr.RequirementID] {
+				errors = append(errors, fmt.Sprintf("criterion #%d references undefined %s",
+					cr.Number, cr.RequirementID))
+				continue
+			}
+			referenced[cr.RequirementID] = true
+		}
+		for _, r := range c.Requirements {
+			if r.ID == "" {
+				continue
+			}
+			if !referenced[r.ID] {
+				errors = append(errors, fmt.Sprintf("requirement %s is declared but not referenced by any deliverable or criterion", r.ID))
+			}
+		}
+	}
 	return errors
 }
 
@@ -176,8 +348,19 @@ func (c *Contract) Validate() []string {
 // state of the working tree. This is the "Contract" dimension of the
 // evaluator: did the implementer actually deliver what was promised?
 //
-// The check is deliberately structural (file exists, expected exports
-// present). Functional correctness is the job of other sensors.
+// Two layers run here:
+//
+//  1. Structural deliverables: file exists, expected exports present.
+//     This has been the harness's contract check since v0.1.
+//  2. Acceptance-criterion evidence: when a criterion declares an
+//     Evidence cell, the harness mechanically verifies that the named
+//     test, e2e spec, or approved fixture is reachable. Criteria
+//     without evidence are skipped so legacy contracts keep their
+//     pre-existing scores.
+//
+// Functional correctness still belongs to the deterministic sensors;
+// this method only checks that the implementation maps to the promises
+// the contract makes.
 func (c *Contract) CheckAgainstDiff(root string) evaluator.ContractCheckResult {
 	res := evaluator.ContractCheckResult{Status: "satisfied"}
 	totalChecks := 0
@@ -220,12 +403,25 @@ func (c *Contract) CheckAgainstDiff(root string) evaluator.ContractCheckResult {
 		}
 	}
 
+	for _, cr := range c.Criteria {
+		if cr.Evidence.Kind == "" {
+			continue
+		}
+		totalChecks++
+		if checkCriterionEvidence(root, cr) {
+			passedChecks++
+			continue
+		}
+		res.UnmetCriteria = append(res.UnmetCriteria, formatUnmetCriterion(cr))
+	}
+
 	if len(res.MissingDeliverables) > 0 || len(res.UnmetCriteria) > 0 {
 		res.Status = "partial"
 	}
 
 	// Score: percentage of declared structural promises satisfied.
-	// A deliverable path is one check; each declared export is another.
+	// A deliverable path is one check; each declared export is another;
+	// each criterion with declared evidence is another.
 	if totalChecks == 0 {
 		res.Score = 0
 		res.Status = "missing"
@@ -236,6 +432,122 @@ func (c *Contract) CheckAgainstDiff(root string) evaluator.ContractCheckResult {
 		res.Status = "violated"
 	}
 	return res
+}
+
+func formatUnmetCriterion(cr AcceptanceCriterion) string {
+	prefix := fmt.Sprintf("criterion #%d", cr.Number)
+	if cr.RequirementID != "" {
+		prefix = fmt.Sprintf("%s (%s)", cr.RequirementID, prefix)
+	}
+	ref := cr.Evidence.Ref
+	switch cr.Evidence.Kind {
+	case "tests":
+		return fmt.Sprintf("%s evidence `tests:%s` not found in any test file", prefix, ref)
+	case "e2e":
+		return fmt.Sprintf("%s e2e spec `%s` does not exist", prefix, ref)
+	case "fixture":
+		return fmt.Sprintf("%s approved fixture `%s` is missing from .harness/fixtures/", prefix, ref)
+	case "inspection":
+		return fmt.Sprintf("%s requires manual inspection: %s", prefix, ref)
+	default:
+		return fmt.Sprintf("%s has unrecognized evidence kind `%s`", prefix, cr.Evidence.Kind)
+	}
+}
+
+// checkCriterionEvidence answers whether the criterion's declared evidence
+// can be located in the repository. The check is intentionally loose: it
+// confirms the artifact exists, not that it actually validates the
+// behavior. Functional verification stays the job of the test/fixture
+// itself, which runs under its sensor in the same QA pass.
+//
+// inspection evidence always fails the mechanical check so the user gets
+// a visible reminder; the criterion can still pass once the evidence is
+// upgraded to a mechanical kind or once the contract drops the row.
+func checkCriterionEvidence(root string, cr AcceptanceCriterion) bool {
+	switch cr.Evidence.Kind {
+	case "tests":
+		return findTestEvidence(root, cr.Evidence.Ref)
+	case "e2e":
+		if cr.Evidence.Ref == "" {
+			return false
+		}
+		path := cr.Evidence.Ref
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(root, path)
+		}
+		_, err := os.Stat(path)
+		return err == nil
+	case "fixture":
+		if cr.Evidence.Ref == "" {
+			return false
+		}
+		name := cr.Evidence.Ref
+		if !strings.HasSuffix(name, ".json") {
+			name += ".json"
+		}
+		path := filepath.Join(root, ".harness", "fixtures", name)
+		_, err := os.Stat(path)
+		return err == nil
+	case "inspection":
+		return false
+	default:
+		return false
+	}
+}
+
+// findTestEvidence walks common test directories looking for a file that
+// references the given test name as a substring. The search is bounded
+// to a handful of recognised test-file suffixes so it stays cheap.
+func findTestEvidence(root, ref string) bool {
+	if ref == "" {
+		return false
+	}
+	matched := false
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if matched {
+			return filepath.SkipDir
+		}
+		if info.IsDir() {
+			base := filepath.Base(path)
+			switch base {
+			case "node_modules", ".git", "dist", "build", "coverage", ".harness":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !isTestFile(info.Name()) {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		if strings.Contains(string(b), ref) {
+			matched = true
+		}
+		return nil
+	})
+	return matched
+}
+
+func isTestFile(name string) bool {
+	lower := strings.ToLower(name)
+	for _, suffix := range []string{
+		".test.ts", ".test.tsx", ".test.js", ".test.jsx",
+		".spec.ts", ".spec.tsx", ".spec.js", ".spec.jsx",
+		"_test.go", "_test.py",
+	} {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+	if strings.HasPrefix(lower, "test_") && strings.HasSuffix(lower, ".py") {
+		return true
+	}
+	return false
 }
 
 func hasExportedSymbol(source, symbol string) bool {
@@ -267,18 +579,40 @@ const contractTemplate = `# Sprint %03d — %s
 ## Goal
 <expand on the goal in 2-3 sentences — what exactly is being built?>
 
+## Size
+<small | medium | large. Sets the planning depth for this sprint.
+- small: ≤3 deliverables, no design/tasks file required.
+- medium: tasks plan in .harness/tasks/sprint-NNN.md is required.
+- large: both design (.harness/design/sprint-NNN.md) and tasks plans required.
+Default below; bump to medium/large when scope grows.>
+
+small
+
+## Requirements
+<optional; required by spec-driven planning. Declare requirement IDs so
+deliverables, criteria, and tasks can reference them.>
+
+- REQ-001: <first requirement>
+- REQ-002: <second requirement>
+
 ## Deliverables
-- ` + "`path/to/file.ts`" + ` exports: ` + "`functionName`" + `
-- ` + "`path/to/another.ts`" + ` exports: ` + "`anotherFn`" + `
+<reference a REQ in the same line when the deliverable closes that
+requirement. The reference is plain text; the parser picks it up.>
+
+- ` + "`path/to/file.ts`" + ` exports: ` + "`functionName`" + ` (REQ-001)
+- ` + "`path/to/another.ts`" + ` exports: ` + "`anotherFn`" + ` (REQ-002)
 
 ## Acceptance Criteria
-| # | Criterion                                  | Threshold |
-|---|--------------------------------------------|-----------|
-| 1 | <criterion 1, observable and verifiable>   | 6/10      |
-| 2 | <criterion 2>                              | 7/10      |
-| 3 | Coverage on new files                      | 8/10      |
-| 4 | E2E test passes for primary flow           | 8/10      |
-| 5 | No new high-severity findings              | 9/10      |
+<the 5-column form enforces traceability and lets Harness mechanically
+verify evidence. Evidence kinds: tests:<name>, e2e:<path>, fixture:<name>,
+inspection:<note>. The legacy 3-column form below is still parsed for
+backwards compatibility.>
+
+| # | REQ     | Criterion                                  | Evidence                              | Threshold |
+|---|---------|--------------------------------------------|---------------------------------------|-----------|
+| 1 | REQ-001 | <observable, verifiable statement>         | tests:functionName handles edge case  | 8/10      |
+| 2 | REQ-001 | <observable outcome from the user side>    | e2e:tests/e2e/feature.spec.ts         | 7/10      |
+| 3 | REQ-002 | <observable, verifiable statement>         | fixture:feature-error-response        | 9/10      |
 
 ## Constraints
 - forbidden_imports: ` + "`src/domain/* → src/ui/*`" + `

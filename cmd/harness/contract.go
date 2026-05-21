@@ -126,6 +126,9 @@ func printAgreementStatus(st agreement.Status) {
 	if len(st.MissingRoles) > 0 {
 		fmt.Printf("  Missing:  %s\n", strings.Join(st.MissingRoles, ", "))
 	}
+	if len(st.Hashed) > 0 {
+		fmt.Printf("  Hashed:   %s\n", strings.Join(st.Hashed, ", "))
+	}
 	if st.Reason != "" {
 		fmt.Printf("  Reason:   %s\n", st.Reason)
 	}

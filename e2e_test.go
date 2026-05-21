@@ -152,6 +152,132 @@ func TestE2EContractLifecycleProducesCurrentReportsAndProgress(t *testing.T) {
 	assertContains(t, string(runHarness(t, exe, root, "sprint", "repair")), "No repair required")
 }
 
+func TestE2EPreCommitHookBlocksFastFail(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+
+	// Pretend this is a git repo so install-hooks --pre-commit writes the
+	// hook. We do not need actual git to run the hook script directly.
+	if err := os.MkdirAll(filepath.Join(root, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	runHarness(t, exe, root, "init", "--cli", "none", "--skills", "off")
+	runHarness(t, exe, root, "install-hooks", "--cli", "none", "--pre-commit")
+
+	hookPath := filepath.Join(root, ".git", "hooks", "pre-commit")
+	if _, err := os.Stat(hookPath); err != nil {
+		t.Fatalf("expected pre-commit hook to be installed at %s: %v", hookPath, err)
+	}
+	b, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, needle := range []string{"sprint qa --fast", "--no-verify"} {
+		if !strings.Contains(string(b), needle) {
+			t.Fatalf("expected pre-commit hook to mention %q, got:\n%s", needle, b)
+		}
+	}
+
+	// Doctor must surface the new hook.
+	doctor := runHarness(t, exe, root, "doctor")
+	if !strings.Contains(string(doctor), "git pre-commit runs fast QA") {
+		t.Fatalf("expected doctor to report pre-commit hook, got:\n%s", doctor)
+	}
+}
+
+func TestE2EFastQASkipsAgreementGateAndSlowDimensions(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+	writeIntegrationFile(t, filepath.Join(root, "delivered.txt"), "ok\n")
+
+	runHarness(t, exe, root, "init", "--cli", "none", "--skills", "off")
+	runHarness(t, exe, root, "sprint", "new", "fast qa shift-left")
+	writeIntegrationFile(t, filepath.Join(root, ".harness", "contracts", "sprint-001.md"),
+		validContract("fast qa shift-left", "delivered.txt", ""))
+	// Note: no contract propose/approve. Fast mode must still run.
+
+	out := runHarness(t, exe, root, "sprint", "qa", "--fast", "--format", "json")
+	var result struct {
+		Verdict    string `json:"verdict"`
+		Dimensions map[string]struct {
+			Skipped bool `json:"skipped"`
+			Passed  bool `json:"passed"`
+		} `json:"dimensions"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("parse fast qa: %v\n%s", err, out)
+	}
+	if result.Verdict != "PASS" {
+		t.Fatalf("expected PASS for fast mode with structural contract check, got %s\n%s", result.Verdict, out)
+	}
+	contract, ok := result.Dimensions["contract"]
+	if !ok {
+		t.Fatalf("expected contract dimension in fast mode, got %+v", result.Dimensions)
+	}
+	if contract.Skipped {
+		t.Fatal("contract dimension must run in fast mode; it is the structural check the hook protects")
+	}
+
+	// Fast mode must NOT overwrite the canonical report — there should
+	// not be a report file at all yet because we never ran a full QA.
+	reportPath := filepath.Join(root, ".harness", "reports", "sprint-001.json")
+	if _, err := os.Stat(reportPath); err == nil {
+		t.Fatalf("fast mode should not write %s; that is the slot for full QA only", reportPath)
+	}
+}
+
+func TestE2EContextSizeReportsHarnessBundle(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+	runHarness(t, exe, root, "init", "--cli", "none", "--skills", "off")
+
+	out := runHarness(t, exe, root, "context", "size", "--format", "json")
+	var report struct {
+		TotalBytes    int64 `json:"total_bytes"`
+		TokenEstimate int64 `json:"token_estimate"`
+		SoftLimit     int64 `json:"soft_limit_tokens"`
+	}
+	if err := json.Unmarshal(out, &report); err != nil {
+		t.Fatalf("parse context size: %v\n%s", err, out)
+	}
+	if report.SoftLimit == 0 {
+		t.Fatal("expected non-zero soft limit")
+	}
+	if report.TotalBytes <= 0 {
+		t.Fatalf("expected harness init to produce some context, got %d bytes", report.TotalBytes)
+	}
+}
+
+func TestE2EWatchOnceWritesReportWithoutSprint(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+	runHarness(t, exe, root, "init", "--cli", "none", "--skills", "off")
+
+	// No sprint contract, no agreed gate; watch must still produce a
+	// report because drift monitoring is independent of the sprint cycle.
+	out := runHarness(t, exe, root, "watch", "once", "--format", "json")
+	var report struct {
+		SchemaVersion string `json:"schema_version"`
+		Findings      int    `json:"findings"`
+	}
+	if err := json.Unmarshal(out, &report); err != nil {
+		t.Fatalf("parse watch report: %v\n%s", err, out)
+	}
+	if report.SchemaVersion == "" {
+		t.Fatalf("expected schema_version in watch report, got %s", out)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".harness", "watch", "latest.json")); err != nil {
+		t.Fatalf("expected .harness/watch/latest.json to exist: %v", err)
+	}
+
+	// Doctor must mention the watch report after the first run.
+	doctor := runHarness(t, exe, root, "doctor")
+	if !strings.Contains(string(doctor), "drift watch report present") {
+		t.Fatalf("expected doctor to recognise watch report, got:\n%s", doctor)
+	}
+}
+
 func TestE2ENodeProjectRunsFullQualityGateWithDeterministicLocalToolchain(t *testing.T) {
 	exe := buildHarness(t)
 	root := t.TempDir()

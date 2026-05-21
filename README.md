@@ -17,7 +17,7 @@ quality evidence visible and conservative.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.5.5
+npx github:dancampari/harness#v0.9.0
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -56,12 +56,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.5.5 --yes
-npx github:dancampari/harness#v0.5.5 --cli codex --yes
-npx github:dancampari/harness#v0.5.5 --cli claude --yes
-npx github:dancampari/harness#v0.5.5 --cli cursor --yes
-npx github:dancampari/harness#v0.5.5 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.5.5 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.9.0 --yes
+npx github:dancampari/harness#v0.9.0 --cli codex --yes
+npx github:dancampari/harness#v0.9.0 --cli claude --yes
+npx github:dancampari/harness#v0.9.0 --cli cursor --yes
+npx github:dancampari/harness#v0.9.0 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.9.0 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -72,7 +72,7 @@ npx github:dancampari/harness#v0.5.5 --cli codex --planning manual --scope globa
 Use one command to refresh Harness in a project that already has `.harness/`:
 
 ```bash
-npx github:dancampari/harness#v0.5.5 upgrade --yes
+npx github:dancampari/harness#v0.9.0 upgrade --yes
 ```
 
 The upgrade command preserves project memory and history:
@@ -136,8 +136,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.5.5 --yes
-npx github:dancampari/harness#v0.5.5 sprint new "implement user auth"
+npx github:dancampari/harness#v0.9.0 --yes
+npx github:dancampari/harness#v0.9.0 sprint new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -151,21 +151,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.5.5 contract propose
-npx github:dancampari/harness#v0.5.5 contract approve --role planner
-npx github:dancampari/harness#v0.5.5 contract approve --role tester
+npx github:dancampari/harness#v0.9.0 contract propose
+npx github:dancampari/harness#v0.9.0 contract approve --role planner
+npx github:dancampari/harness#v0.9.0 contract approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.5.5 sprint qa
-npx github:dancampari/harness#v0.5.5 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.5.5 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.5.5 sprint repair
-npx github:dancampari/harness#v0.5.5 sprint score
-npx github:dancampari/harness#v0.5.5 run --resume
+npx github:dancampari/harness#v0.9.0 sprint qa
+npx github:dancampari/harness#v0.9.0 sprint qa --accept-screenshots
+npx github:dancampari/harness#v0.9.0 sprint qa --accept-fixtures
+npx github:dancampari/harness#v0.9.0 sprint repair
+npx github:dancampari/harness#v0.9.0 sprint score
+npx github:dancampari/harness#v0.9.0 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -464,7 +464,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Report 1-12/40` or `Events 3-10/80`.
 
 ```text
-harness   Autonomous Development Pipeline   v0.5.5      Project: harness-demo   Agent: codex   Status: PASS
+harness   Autonomous Development Pipeline   v0.9.0      Project: harness-demo   Agent: codex   Status: PASS
 
 [1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 
@@ -502,15 +502,128 @@ If an active dimension has no available sensor that executes, Harness emits a
 | security | Dependency vulnerabilities | `npm-audit` |
 | architecture | Import graph, cycles, forbidden imports | `js-architecture` |
 | behavior | Approved command fixtures | `approved-fixtures` |
-| contract | Declared deliverables and exports | built-in contract validator |
+| contract | Declared deliverables, exports, and criterion evidence | built-in contract validator |
 | e2e | Browser behavior and screenshot baselines | `playwright` |
+| review | Optional inferential reviewer (LLM-backed CLI) | `external-reviewer` |
 
 JSON reports include:
 
 - `schema_version`;
 - per-dimension scores and findings;
 - configured sensor status: registered, available, executed, error, duration;
-- isolated evaluator process metadata.
+- isolated evaluator process metadata;
+- workspace SHA captured at QA time so `harness sprint score` refuses to consolidate stale reports.
+
+Findings carry an optional `hint` field with an LLM-optimized
+"Suggested fix / Do NOT" pair for well-known rules, surfaced in the
+repair brief under `## Suggested Fixes (LLM-optimized)`.
+
+## Shift-Left With `--fast`
+
+`harness sprint qa --fast` runs only the fast static-analysis sensors
+(lint, type checks, complexity, architecture, contract structural).
+Dimensions without a fast sensor are marked `SKIPPED` and do not block
+the verdict. The agreement gate is bypassed so the same command works
+during contract authoring. A non-zero exit code on `FAIL` lets git
+hooks block the offending commit.
+
+Install the blocking pre-commit hook with:
+
+```bash
+harness install-hooks --pre-commit
+```
+
+The hook respects `git commit --no-verify` for the rare cases where
+the user must bypass shift-left.
+
+## Drift Watch
+
+`harness watch once` runs the fast sensor set plus configured audit
+adapters (`npm-audit`, `pip-audit`, `govulncheck`, `cargo-audit`)
+outside the sprint lifecycle. Reports go to
+`.harness/watch/<timestamp>.json` with a `latest.json` pointer, and
+deltas versus the previous run are reported so a cron schedule can
+fail on regressions:
+
+```bash
+harness watch once --fail-on-regression --format=tty
+```
+
+A ready-to-copy GitHub Actions workflow lives at
+`docs/templates/harness-watch.yml.example`.
+
+## Acceptance Criteria With Evidence
+
+Sprint contracts use a 5-column acceptance table that links each
+criterion to a Requirement ID and mechanical Evidence:
+
+```markdown
+## Requirements
+- REQ-001: Feature rejects invalid input
+- REQ-002: Feature handles concurrent requests safely
+
+## Acceptance Criteria
+| # | REQ     | Criterion                  | Evidence                          | Threshold |
+|---|---------|----------------------------|-----------------------------------|-----------|
+| 1 | REQ-001 | Invalid input returns 400  | tests:handles invalid input       | 8/10      |
+| 2 | REQ-002 | Concurrent calls serialise | e2e:tests/e2e/feature.spec.ts     | 7/10      |
+| 3 | REQ-001 | Approved fixture confirms  | fixture:invalid-input-400         | 9/10      |
+```
+
+Evidence kinds: `tests:<substring>` (matched against test files),
+`e2e:<path>` (file must exist), `fixture:<name>` (file must exist
+under `.harness/fixtures/`). `inspection:<note>` marks a criterion as
+requiring manual review.
+
+The legacy 3-column form (`# | Criterion | Threshold`) still parses
+for backwards compatibility.
+
+## Sprint Size And Planning Policy
+
+Contracts may declare a `## Size: small|medium|large` section.
+Spec-driven planning composes mode rules with size rules:
+
+- `spec-driven` mode: requires `## Requirements`, REQ-IDs on every
+  criterion, and mechanical evidence.
+- `medium` size: requires `.harness/tasks/sprint-NNN.md`.
+- `large` size: also requires `.harness/design/sprint-NNN.md`.
+
+`harness contract propose` and `harness contract status` enforce both
+layers. Undeclared size keeps legacy behavior for older contracts.
+
+## Context Budget
+
+`harness context size` estimates the agent-context cost of the harness
+memory bundle (`spec.md`, `progress.md`, `agent-protocol.md`,
+`context/*.md`, active sprint `contract|design|tasks`). Doctor warns
+when the bundle crosses 40k tokens — the soft limit for "useful
+working window remaining" in a 200k-token model.
+
+## Optional Inferential Reviewer
+
+The `review` dimension is disabled by default. Opt in by configuring
+an external reviewer CLI (anything from `claude code --agent ...` to a
+custom Python script around the Anthropic SDK):
+
+```yaml
+# .harness/config.yaml
+adapters:
+  review: [external-reviewer]
+thresholds:
+  review: 70
+weights:
+  review: 10
+review:
+  command: ["claude", "code", "--agent", "harness-output-reviewer"]
+  timeout_seconds: 600
+```
+
+The reviewer reads a JSON bundle on stdin and emits JSON findings on
+stdout. Full I/O contract in `docs/INFERENTIAL_REVIEWER.md`. The
+harness binary itself never embeds an LLM SDK.
+
+Review is automatically excluded from `--fast` and from `harness
+watch`, so the LLM cost only happens on full `harness sprint qa`.
 
 ## Approved Fixtures
 
@@ -617,10 +730,10 @@ state and should stay local.
 harness                         one-command setup
 harness setup [--yes] [--cli auto|codex|claude|cursor|all|none] [--planning auto|spec-driven|contract|manual] [--scope auto|project|global] [--start]
 harness init [--force] [--install-hooks] [--cli auto|codex|claude|cursor|all|none] [--planning auto|spec-driven|contract|manual]
-harness install-hooks [--interactive] [--cli auto|codex|claude|cursor|all|none] [--planning auto|spec-driven|contract|manual]
+harness install-hooks [--interactive] [--cli auto|codex|claude|cursor|all|none] [--planning auto|spec-driven|contract|manual] [--pre-commit]
 harness skills install [--force] [--planning auto|spec-driven|contract|manual]
 harness skills status
-harness doctor [--strict]
+harness doctor [--strict] [--fix]
 harness spec
 harness sprint new <goal>
 harness sprint status
@@ -628,10 +741,13 @@ harness contract status [--sprint N]
 harness contract propose [--sprint N]
 harness contract approve --role planner|tester [--sprint N]
 harness contract reject --role planner|tester --reason <text> [--sprint N]
-harness sprint qa [--format=tty|json] [--accept-screenshots] [--accept-fixtures] [--allow-unagreed]
+harness sprint qa [--format=tty|json] [--fast] [--accept-screenshots] [--accept-fixtures] [--allow-unagreed]
 harness sprint repair
 harness sprint score [--allow-fail]
 harness sprint list
+harness watch once [--fail-on-regression] [--format=tty|json]
+harness watch list [--limit N]
+harness context size [--format=tty|json]
 harness run [--resume]
 harness ui [--resume]
 harness progress

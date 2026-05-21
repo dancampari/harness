@@ -303,9 +303,9 @@ and migration work.
 
 Good sprint goals:
 
-- "Add appointment conflict validation in the server action and database RPC"
-- "Create the public service-selection booking step"
-- "Add QA coverage for barber availability edge cases"
+- "Add conflict validation in the server action and database RPC"
+- "Create the public selection step for the primary entity"
+- "Add QA coverage for resource availability edge cases"
 
 Bad sprint goals:
 
@@ -351,27 +351,27 @@ Weak:
 
 | # | Criterion | Threshold |
 |---|-----------|-----------|
-| 1 | Booking works | 8/10 |
+| 1 | Feature works | 8/10 |
 
 Strong:
 
 | # | Criterion | Threshold |
 |---|-----------|-----------|
-| 1 | Creating an appointment rejects overlapping intervals for the same barber on the server side | 10/10 |
-| 2 | The public booking flow shows only available time slots for the selected service duration and date | 8/10 |
-| 3 | Unit tests cover overlap, adjacent appointments, cancelled appointments, and timezone conversion | 8/10 |
+| 1 | The server action rejects overlapping resource reservations on the server side and returns 409 | 10/10 |
+| 2 | The public flow shows only available options derived from the current entity state and selected window | 8/10 |
+| 3 | Unit tests cover the overlap, adjacent, cancelled, and timezone-conversion cases | 8/10 |
 
 Weak:
 
 | # | Criterion | Threshold |
 |---|-----------|-----------|
-| 1 | UI looks premium | 8/10 |
+| 1 | UI looks good | 8/10 |
 
 Strong:
 
 | # | Criterion | Threshold |
 |---|-----------|-----------|
-| 1 | Admin appointment list uses the product dark/copper palette, compact desktop spacing, and clear empty/loading/error states | 8/10 |
-| 2 | Mobile public booking uses touch-sized time chips and avoids table layouts | 8/10 |
-| 3 | Playwright covers service selection, date selection, slot selection, login gate, and success state | 8/10 |
+| 1 | Admin list view uses the product palette, compact desktop spacing, and clear empty/loading/error states | 8/10 |
+| 2 | Mobile public flow uses touch-sized controls and avoids table layouts | 8/10 |
+| 3 | Playwright covers the primary selection steps, the login gate, and the success state | 8/10 |
 `

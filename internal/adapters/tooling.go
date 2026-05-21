@@ -52,3 +52,34 @@ func parseToolLine(line string) (file string, lineNo int, message string) {
 	n, _ := strconv.Atoi(m[2])
 	return filepath.ToSlash(m[1]), n, strings.TrimSpace(m[3])
 }
+
+// readDirSafe lists entries in dir as names, returning an empty slice
+// instead of an error when the directory does not exist. Used by
+// adapters that opportunistically read project artifacts.
+func readDirSafe(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		out = append(out, e.Name())
+	}
+	return out, nil
+}
+
+// readFileSafe reads path as a string, returning the empty string on
+// any error so callers can degrade gracefully.
+func readFileSafe(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}

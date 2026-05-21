@@ -43,6 +43,8 @@ func Execute(version string) error {
 		newSkillsCmd(),
 		newGuardCmd(),
 		newDoctorCmd(),
+		newWatchCmd(),
+		newContextCmd(),
 	)
 
 	return root.Execute()

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/dancampari/harness/internal/adapters"
+	"github.com/dancampari/harness/internal/budget"
 	"github.com/dancampari/harness/internal/config"
 	"github.com/dancampari/harness/internal/detect"
 	"github.com/spf13/cobra"
@@ -368,6 +369,13 @@ func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doct
 		}
 	}
 
+	checkGitHooks(root)
+	checkDriftWatch(root)
+	checkContextBudget(harnessDir)
+	if cfg, err := config.Load(filepath.Join(harnessDir, "config.yaml")); err == nil {
+		checkInferentialReviewer(cfg, audit)
+	}
+
 	expected := expectedReferences(setup.CodingCLI, project.CodingCLIs)
 	if len(expected) == 0 {
 		fmt.Println("  WARN no coding CLI reference detected; Harness will rely on manual use")
@@ -377,6 +385,84 @@ func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doct
 	for _, cli := range expected {
 		checkAgentReference(root, cli, setup.PlanningMode, audit)
 	}
+}
+
+// checkGitHooks surfaces which Harness-managed git hooks are installed.
+// The hooks are opt-in safety nets; their absence is never an error,
+// only a warning, because Harness must work in repos without git or in
+// environments where hook installation is blocked by policy.
+func checkGitHooks(root string) {
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		// No git repo in this directory; nothing to surface.
+		return
+	}
+	prePush := filepath.Join(hooksDir, "pre-push")
+	if fileContains(prePush, "harness", "sprint qa") {
+		fmt.Println("  OK   git pre-push reports QA")
+	} else {
+		fmt.Println("  WARN git pre-push not installed; run harness install-hooks")
+	}
+	preCommit := filepath.Join(hooksDir, "pre-commit")
+	if fileContains(preCommit, "harness", "sprint qa --fast") {
+		fmt.Println("  OK   git pre-commit runs fast QA")
+	} else {
+		fmt.Println("  WARN git pre-commit not installed; run harness install-hooks --pre-commit to enable shift-left")
+	}
+}
+
+// checkInferentialReviewer surfaces whether the optional LLM-backed
+// reviewer is configured. It is the only Harness adapter that may
+// invoke a model, so making its state explicit prevents the user from
+// being surprised by an unexpected subprocess.
+func checkInferentialReviewer(cfg config.Config, audit *doctorAudit) {
+	active := cfg.ThresholdFor(config.DimReview) > 0 && cfg.WeightFor(config.DimReview) > 0
+	hasCommand := len(cfg.Review.Command) > 0
+	if !active && !hasCommand {
+		return // intentionally disabled; nothing to report
+	}
+	if active && !hasCommand {
+		fmt.Println("  FAIL review dimension is active but review.command is empty in .harness/config.yaml")
+		audit.fail("review dimension is active but review.command is empty in .harness/config.yaml")
+		return
+	}
+	if !active && hasCommand {
+		fmt.Println("  WARN review.command is configured but thresholds.review and weights.review are zero (dimension disabled)")
+		return
+	}
+	fmt.Printf("  OK   inferential reviewer configured (%s)\n", cfg.Review.Command[0])
+}
+
+// checkContextBudget surfaces how much agent context the harness memory
+// is consuming. The framework's value depends on the agent actually
+// reading spec.md, progress.md, and context/*.md every session, so
+// uncontrolled growth there directly hurts the working window. Doctor
+// warns rather than fails because pruning context is a judgement call.
+func checkContextBudget(harnessDir string) {
+	snap, err := budget.Inspect(harnessDir, latestSprintNumber(harnessDir))
+	if err != nil {
+		return
+	}
+	if snap.OverBudget() {
+		fmt.Printf("  WARN context bundle is ~%d tokens (soft limit %d); prune progress.md or context/*.md\n",
+			snap.TokenEstimate, snap.SoftLimitTokens)
+		return
+	}
+	fmt.Printf("  OK   context bundle ~%d tokens (limit %d)\n", snap.TokenEstimate, snap.SoftLimitTokens)
+}
+
+// checkDriftWatch reports whether `harness watch` has run recently.
+// The framework's mission is long-running autonomous development
+// ("apps inteiras"), and drift between sprints is what kills quality
+// in that mode. Doctor nudges the user toward running watch even when
+// the rest of the sprint cycle is healthy.
+func checkDriftWatch(root string) {
+	latest := filepath.Join(root, ".harness", "watch", "latest.json")
+	if _, err := os.Stat(latest); err != nil {
+		fmt.Println("  WARN drift watch never ran; run harness watch once or schedule docs/templates/harness-watch.yml.example")
+		return
+	}
+	fmt.Println("  OK   drift watch report present at .harness/watch/latest.json")
 }
 
 type setupState struct {

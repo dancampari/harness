@@ -130,14 +130,50 @@ implement and a tester can verify without guessing intent.
 Write .harness/contracts/sprint-NNN.md with:
 
 - one small goal;
-- requirement IDs such as REQ-001;
-- concrete deliverables with paths, routes, exported symbols, commands, schema
-  names, migrations, or test files;
-- acceptance criteria that reference requirement IDs;
+- a ` + "`## Requirements`" + ` section listing REQ-NNN ids and short statements;
+- concrete deliverables that reference REQ-NNN in plain text;
+- acceptance criteria in the 5-column form so Harness can mechanically verify
+  evidence;
 - constraints for architecture, security, complexity, visual quality, and
-  forbidden shortcuts when relevant;
-- verification evidence explaining which Harness sensors, tests, fixtures, or
-  inspections will prove each requirement.
+  forbidden shortcuts when relevant.
+
+## Contract Skeleton
+
+` + "```markdown" + `
+# Sprint NNN — <title>
+
+## Goal
+<2-3 sentences describing the smallest useful slice>
+
+## Requirements
+- REQ-001: <first requirement statement>
+- REQ-002: <second requirement statement>
+
+## Deliverables
+- ` + "`src/feature/x.ts`" + ` exports: ` + "`doX`" + ` (REQ-001)
+- ` + "`tests/e2e/x.spec.ts`" + ` (REQ-002)
+
+## Acceptance Criteria
+| # | REQ     | Criterion                      | Evidence                              | Threshold |
+|---|---------|--------------------------------|---------------------------------------|-----------|
+| 1 | REQ-001 | <observable outcome>           | tests:doX handles overlap             | 8/10      |
+| 2 | REQ-002 | <observable outcome>           | e2e:tests/e2e/x.spec.ts               | 7/10      |
+| 3 | REQ-001 | <observable outcome>           | fixture:overlap-409                   | 9/10      |
+
+## Constraints
+- forbidden_imports: ` + "`src/domain/* → src/ui/*`" + `
+- max_function_complexity: 10
+- coverage_min: 80
+` + "```" + `
+
+## Evidence Kinds
+
+- tests:<substring> — the substring must appear in at least one test file
+  (` + "`*.test.ts`" + `, ` + "`*.spec.ts`" + `, ` + "`*_test.go`" + `, ` + "`*_test.py`" + `, ` + "`test_*.py`" + `).
+- e2e:<path> — relative path that must resolve to an existing file at QA time.
+- fixture:<name> — must match ` + "`.harness/fixtures/<name>.json`" + `.
+- inspection:<note> — manual review reminder; Harness records it as unmet
+  until the criterion is rewritten to a mechanical kind.
 
 ## Rules
 
@@ -147,6 +183,8 @@ Write .harness/contracts/sprint-NNN.md with:
 - For deterministic behavior changes, add or update .harness/fixtures/*.json.
 - For UI/browser behavior, require Playwright coverage and screenshot review
   when visuals matter.
+- Every REQ-NNN must be referenced by at least one deliverable or criterion;
+  every reference must resolve to a declared requirement.
 - When done, run harness contract propose and then approve planner only if the
   contract is complete.
 `

@@ -35,5 +35,6 @@ func BuildRegistry() *sensors.Registry {
 	r.Register(CargoTest{})
 	r.Register(CargoAudit{})
 	r.Register(Semgrep{})
+	r.Register(ExternalReviewer{}) // optional; reads its config from .harness/config.yaml at Run time
 	return r
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/dancampari/harness/internal/config"
 	"github.com/dancampari/harness/internal/sensors"
+	"github.com/dancampari/harness/internal/workspace"
 )
 
 // Evaluator runs sensors and aggregates results. Stateless: a new instance per
@@ -36,6 +37,11 @@ type DimensionScore struct {
 	Passed      bool              `json:"passed"`
 	Findings    []sensors.Finding `json:"findings"`
 	SensorsUsed []string          `json:"sensors_used"`
+	// Skipped marks dimensions that the fast-mode run intentionally did
+	// not evaluate. Skipped dimensions do not contribute to the verdict
+	// or weighted score. They are surfaced in reports so callers see
+	// what was deferred to a full QA run.
+	Skipped bool `json:"skipped,omitempty"`
 }
 
 // SensorStatus records the execution state of each configured sensor.
@@ -64,12 +70,17 @@ type EvaluationResult struct {
 }
 
 type ProcessInfo struct {
-	PID                  int  `json:"pid"`
-	ParentPID            int  `json:"parent_pid"`
-	Isolated             bool `json:"isolated"`
-	ContextEnvStripped   bool `json:"context_env_stripped"`
-	AcceptingScreenshots bool `json:"accepting_screenshots"`
-	AcceptingFixtures    bool `json:"accepting_fixtures"`
+	PID                  int    `json:"pid"`
+	ParentPID            int    `json:"parent_pid"`
+	Isolated             bool   `json:"isolated"`
+	ContextEnvStripped   bool   `json:"context_env_stripped"`
+	AcceptingScreenshots bool   `json:"accepting_screenshots"`
+	AcceptingFixtures    bool   `json:"accepting_fixtures"`
+	// WorkspaceSHA is the deterministic content hash of the working tree
+	// computed by internal/workspace at QA time. harness sprint score
+	// rejects consolidation when this no longer matches, so reports
+	// cannot be "claimed" against code edited after they were produced.
+	WorkspaceSHA string `json:"workspace_sha,omitempty"`
 }
 
 // ContractCheckResult records whether the sprint's contract was satisfied.
@@ -81,12 +92,37 @@ type ContractCheckResult struct {
 	Score               int      `json:"score"`
 }
 
+// Options tune one Evaluate call. The zero value runs every configured
+// sensor exactly as before; setting Fast to true filters the run to fast
+// static-analysis sensors only (eslint, type checks, complexity,
+// architecture, contract validation). IncludeAudits, when combined with
+// Fast, also runs configured audit sensors so `harness watch` can use
+// the same code path but cover dependency vulnerabilities. SkipContract
+// removes the contract dimension entirely; used by watch runs that are
+// not gating a specific sprint promise.
+type Options struct {
+	Fast           bool
+	IncludeAudits  bool
+	SkipContract   bool
+}
+
 // Evaluate runs configured sensors against root and aggregates results.
 func (e *Evaluator) Evaluate(ctx context.Context, root string, sprintNum int,
 	contractCheck ContractCheckResult) (*EvaluationResult, error) {
+	return e.EvaluateWith(ctx, root, sprintNum, contractCheck, Options{})
+}
+
+// EvaluateWith runs the evaluator with explicit options. Fast mode skips
+// dimensions whose sensors are not classified as fast and marks them
+// Skipped so callers can see what was deferred.
+func (e *Evaluator) EvaluateWith(ctx context.Context, root string, sprintNum int,
+	contractCheck ContractCheckResult, opts Options) (*EvaluationResult, error) {
 
 	start := time.Now()
 	configured := e.configuredSensors(root)
+	if opts.Fast {
+		configured = filterFastSensors(configured, opts.IncludeAudits)
+	}
 	results := make([]sensors.Result, len(configured.toRun))
 
 	var wg sync.WaitGroup
@@ -112,7 +148,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, root string, sprintNum int,
 
 	dims := aggregate(results, e.cfg.Thresholds)
 	active := e.cfg.ActiveDimensions()
-	if isActive(active, config.DimContract) {
+	if isActive(active, config.DimContract) && !opts.SkipContract {
 		dims[string(sensors.DimContract)] = DimensionScore{
 			Dimension:   sensors.DimContract,
 			Score:       contractCheck.Score,
@@ -138,13 +174,25 @@ func (e *Evaluator) Evaluate(ctx context.Context, root string, sprintNum int,
 			}
 			continue
 		}
+		if opts.Fast && !dimensionRunsInFastMode(e.cfg.AdapterNamesForDimension(dim), opts.IncludeAudits) {
+			dims[dim] = skippedDimensionScore(dim, e.cfg.ThresholdFor(dim))
+			continue
+		}
 		dims[dim] = missingSensorDimensionScore(dim, e.cfg.ThresholdFor(dim), e.cfg.AdapterNamesForDimension(dim))
 	}
 
 	total := weightedTotal(dims, e.cfg.Weights)
 	verdict := "PASS"
 	for _, dim := range active {
-		if d, ok := dims[dim]; !ok || !d.Passed {
+		d, ok := dims[dim]
+		if !ok {
+			verdict = "FAIL"
+			break
+		}
+		if d.Skipped {
+			continue
+		}
+		if !d.Passed {
 			verdict = "FAIL"
 			break
 		}
@@ -158,13 +206,14 @@ func (e *Evaluator) Evaluate(ctx context.Context, root string, sprintNum int,
 		Verdict:         verdict,
 		Dimensions:      dims,
 		Sensors:         configured.statuses,
-		Process:         processInfo(),
+		Process:         processInfo(root),
 		ContractCheck:   contractCheck,
 		DurationSeconds: time.Since(start).Seconds(),
 	}, nil
 }
 
-func processInfo() ProcessInfo {
+func processInfo(root string) ProcessInfo {
+	sha, _ := workspace.Hash(root)
 	return ProcessInfo{
 		PID:                  os.Getpid(),
 		ParentPID:            os.Getppid(),
@@ -172,6 +221,7 @@ func processInfo() ProcessInfo {
 		ContextEnvStripped:   os.Getenv("CLAUDE_SESSION_TOKEN") == "" && os.Getenv("CODEX_SESSION_TOKEN") == "" && os.Getenv("CURSOR_TRACE_ID") == "",
 		AcceptingScreenshots: os.Getenv("HARNESS_ACCEPT_SCREENSHOTS") == "1",
 		AcceptingFixtures:    os.Getenv("HARNESS_ACCEPT_FIXTURES") == "1",
+		WorkspaceSHA:         sha,
 	}
 }
 
@@ -192,6 +242,7 @@ func (e *Evaluator) configuredSensors(root string) configuredSensors {
 		config.DimArchitecture,
 		config.DimBehavior,
 		config.DimE2E,
+		config.DimReview,
 	} {
 		for _, name := range e.cfg.AdapterNamesForDimension(dim) {
 			if name != "" {
@@ -236,6 +287,19 @@ func (e *Evaluator) activeAdapterNames() []string {
 	return out
 }
 
+// reviewSensorNames are the configured adapter names registered under
+// the review dimension. The Fast filter excludes them so pre-commit
+// and `harness watch` never trigger an LLM-backed reviewer.
+func (e *Evaluator) reviewSensorNames() map[string]bool {
+	out := map[string]bool{}
+	for _, name := range e.cfg.AdapterNamesForDimension(config.DimReview) {
+		if name != "" {
+			out[name] = true
+		}
+	}
+	return out
+}
+
 // aggregate groups sensor results by dimension and averages their scores.
 func aggregate(results []sensors.Result, thresholds config.ThresholdsConfig) map[string]DimensionScore {
 	type bucket struct {
@@ -260,7 +324,7 @@ func aggregate(results []sensors.Result, thresholds config.ThresholdsConfig) map
 				target = &bucket{}
 				buckets[f.Dimension] = target
 			}
-			target.findings = append(target.findings, f)
+			target.findings = append(target.findings, sensors.EnrichFinding(f))
 		}
 	}
 
@@ -301,8 +365,58 @@ func thresholdOf(thresholds config.ThresholdsConfig, d sensors.Dimension) int {
 		return thresholds.Contract
 	case sensors.DimE2E:
 		return thresholds.E2E
+	case sensors.DimReview:
+		return thresholds.Review
 	}
 	return 70
+}
+
+func filterFastSensors(in configuredSensors, includeAudits bool) configuredSensors {
+	keep := func(name string) bool {
+		if sensors.IsFast(name) {
+			return true
+		}
+		if includeAudits && sensors.IsAudit(name) {
+			return true
+		}
+		return false
+	}
+	out := configuredSensors{statusIndex: map[string]int{}}
+	for _, st := range in.statuses {
+		if !keep(st.Name) {
+			st.Available = false
+			st.Executed = false
+		}
+		out.statusIndex[st.Name] = len(out.statuses)
+		out.statuses = append(out.statuses, st)
+	}
+	for _, s := range in.toRun {
+		if keep(s.Name()) {
+			out.toRun = append(out.toRun, s)
+		}
+	}
+	return out
+}
+
+func dimensionRunsInFastMode(names []string, includeAudits bool) bool {
+	for _, name := range names {
+		if sensors.IsFast(name) {
+			return true
+		}
+		if includeAudits && sensors.IsAudit(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func skippedDimensionScore(dim string, threshold int) DimensionScore {
+	return DimensionScore{
+		Dimension: sensors.Dimension(dim),
+		Threshold: threshold,
+		Passed:    true,
+		Skipped:   true,
+	}
 }
 
 func missingSensorDimensionScore(dim string, threshold int, expected []string) DimensionScore {
@@ -323,7 +437,7 @@ func missingSensorDimensionScore(dim string, threshold int, expected []string) D
 		Score:     0,
 		Threshold: threshold,
 		Passed:    false,
-		Findings:  []sensors.Finding{f},
+		Findings:  []sensors.Finding{sensors.EnrichFinding(f)},
 	}
 }
 
@@ -371,10 +485,14 @@ func weightedTotal(dims map[string]DimensionScore, w config.DimensionWeights) in
 		config.DimBehavior:     w.Behavior,
 		config.DimContract:     w.Contract,
 		config.DimE2E:          w.E2E,
+		config.DimReview:       w.Review,
 	}
 	total := 0
 	totalWeight := 0
 	for name, d := range dims {
+		if d.Skipped {
+			continue
+		}
 		wt := weights[name]
 		total += d.Score * wt
 		totalWeight += wt

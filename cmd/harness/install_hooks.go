@@ -12,11 +12,12 @@ import (
 )
 
 type installHookOptions struct {
-	CLI         string
-	Skills      string
-	Planning    string
-	Interactive bool
-	InstallGit  bool
+	CLI            string
+	Skills         string
+	Planning       string
+	Interactive    bool
+	InstallGit     bool
+	InstallPreCommit bool
 }
 
 func newInstallHooksCmd() *cobra.Command {
@@ -26,6 +27,7 @@ func newInstallHooksCmd() *cobra.Command {
 	var planning string
 	var interactive bool
 	var git bool
+	var preCommit bool
 
 	cmd := &cobra.Command{
 		Use:   "install-hooks",
@@ -36,18 +38,24 @@ func newInstallHooksCmd() *cobra.Command {
   - Cursor:       .cursor/rules/harness.mdc
 
 By default Harness auto-detects existing CLI markers. Use --interactive for
-a guided install, or --cli codex|claude|cursor|all|none in scripts.`,
+a guided install, or --cli codex|claude|cursor|all|none in scripts.
+
+Pass --pre-commit to also install a git pre-commit hook that runs the
+fast-feedback shift-left check (harness sprint qa --fast) on every commit.
+The pre-push hook remains non-blocking; pre-commit blocks the commit when
+fast QA returns FAIL.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if only != "" {
 				cli = only
 				git = only == "git"
 			}
 			return runInstallHooks(installHookOptions{
-				CLI:         cli,
-				Skills:      skills,
-				Planning:    planning,
-				Interactive: interactive,
-				InstallGit:  git,
+				CLI:              cli,
+				Skills:           skills,
+				Planning:         planning,
+				Interactive:      interactive,
+				InstallGit:       git,
+				InstallPreCommit: preCommit,
 			})
 		},
 	}
@@ -57,6 +65,8 @@ a guided install, or --cli codex|claude|cursor|all|none in scripts.`,
 	cmd.Flags().StringVar(&skills, "skills", "auto", "legacy alias for planning: auto|on|off")
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "ask which coding CLI to configure")
 	cmd.Flags().BoolVar(&git, "git", true, "also install the git pre-push safety hook")
+	cmd.Flags().BoolVar(&preCommit, "pre-commit", false,
+		"install a git pre-commit hook that runs harness sprint qa --fast and blocks on FAIL")
 	return cmd
 }
 
@@ -110,7 +120,12 @@ func runInstallHooks(opts installHookOptions) error {
 			fmt.Fprintf(os.Stderr, "  ! git hook skipped: %v\n", err)
 		}
 	}
-	if len(targets) == 0 && !opts.InstallGit {
+	if opts.InstallPreCommit {
+		if err := installGitPreCommitHook(); err != nil {
+			fmt.Fprintf(os.Stderr, "  ! git pre-commit hook skipped: %v\n", err)
+		}
+	}
+	if len(targets) == 0 && !opts.InstallGit && !opts.InstallPreCommit {
 		fmt.Println("No Harness references installed.")
 	}
 	return nil
@@ -501,6 +516,41 @@ exit 0
 		return err
 	}
 	fmt.Println("  OK Git pre-push hook installed:", path)
+	return nil
+}
+
+// installGitPreCommitHook writes a blocking pre-commit hook that runs
+// the shift-left fast QA pass. Unlike pre-push, this hook DOES block on
+// FAIL: the whole point is to catch lint/typecheck/architecture issues
+// before the bad commit lands in history. Users can still bypass with
+// `git commit --no-verify` when needed, which is standard git behavior.
+//
+// The hook skips itself when there is no .harness/config.yaml so cloning
+// a repo and committing before running `harness init` does not break.
+func installGitPreCommitHook() error {
+	dir := filepath.Join(".git", "hooks")
+	if _, err := os.Stat(".git"); err != nil {
+		return fmt.Errorf("not a git repo")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "pre-commit")
+	content := fmt.Sprintf(`#!/bin/sh
+# harness pre-commit hook - shift-left fast feedback
+# Blocks the commit when fast QA returns FAIL. Bypass with --no-verify.
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$repo_root" || exit 0
+if [ ! -f ".harness/config.yaml" ]; then
+  exit 0
+fi
+%s sprint qa --fast --format=tty
+exit $?
+`, harnessInvocation())
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		return err
+	}
+	fmt.Println("  OK Git pre-commit hook installed:", path)
 	return nil
 }
 

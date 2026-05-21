@@ -76,6 +76,104 @@ func TestContractChangeInvalidatesAgreement(t *testing.T) {
 	}
 }
 
+func TestDesignChangeInvalidatesAgreement(t *testing.T) {
+	root := t.TempDir()
+	writeContract(t, root, "design coverage")
+	writeArtifact(t, root, "design", "first design")
+
+	m := NewManager(root)
+	if _, err := m.Propose(1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Approve(1, "planner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Approve(1, "tester"); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := m.Status(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "agreed" {
+		t.Fatalf("expected agreed before design change, got %+v", st)
+	}
+	if !contains(st.Hashed, "contract") || !contains(st.Hashed, "design") {
+		t.Fatalf("expected Hashed to include contract + design, got %v", st.Hashed)
+	}
+
+	writeArtifact(t, root, "design", "changed design")
+	st, err = m.Status(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "changed" {
+		t.Fatalf("expected state changed after design edit, got %+v", st)
+	}
+}
+
+func TestTasksChangeInvalidatesAgreement(t *testing.T) {
+	root := t.TempDir()
+	writeContract(t, root, "tasks coverage")
+	writeArtifact(t, root, "tasks", "first tasks plan")
+
+	m := NewManager(root)
+	if _, err := m.Propose(1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Approve(1, "planner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Approve(1, "tester"); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := m.Status(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "agreed" {
+		t.Fatalf("expected agreed before tasks change, got %+v", st)
+	}
+	if !contains(st.Hashed, "tasks") {
+		t.Fatalf("expected Hashed to include tasks, got %v", st.Hashed)
+	}
+
+	writeArtifact(t, root, "tasks", "changed tasks plan")
+	st, err = m.Status(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "changed" {
+		t.Fatalf("expected state changed after tasks edit, got %+v", st)
+	}
+}
+
+func TestContractOnlySprintHashHasNoDesignTasks(t *testing.T) {
+	root := t.TempDir()
+	writeContract(t, root, "no extras")
+
+	st, err := NewManager(root).Status(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Hashed) != 1 || st.Hashed[0] != "contract" {
+		t.Fatalf("expected Hashed = [contract] for contract-only sprint, got %v", st.Hashed)
+	}
+}
+
+func writeArtifact(t *testing.T, root, kind, body string) {
+	t.Helper()
+	path := filepath.Join(root, kind, "sprint-001.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRejectBlocksContract(t *testing.T) {
 	root := t.TempDir()
 	writeContract(t, root, "first")
@@ -93,6 +191,56 @@ func TestRejectBlocksContract(t *testing.T) {
 	}
 	if _, err := m.Approve(1, "tester"); err == nil {
 		t.Fatal("expected approval after rejection to fail")
+	}
+}
+
+func TestProposeRejectsSpecDrivenContractMissingRequirements(t *testing.T) {
+	root := t.TempDir()
+	writeContract(t, root, "weak spec-driven")
+	writeSetup(t, root, `{"planning_mode":"spec-driven"}`)
+
+	m := NewManager(root)
+	_, err := m.Propose(1)
+	if err == nil {
+		t.Fatal("expected Propose to reject contract that violates spec-driven policy")
+	}
+	if !strings.Contains(err.Error(), "spec-driven policy") {
+		t.Fatalf("expected spec-driven policy error, got %v", err)
+	}
+}
+
+func TestProposeAcceptsCompliantSpecDrivenContract(t *testing.T) {
+	root := t.TempDir()
+	contractPath := filepath.Join(root, "contracts", "sprint-001.md")
+	if err := os.MkdirAll(filepath.Dir(contractPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "# Sprint 001 - compliant spec-driven\n\n" +
+		"## Goal\nShip a compliant spec-driven sprint.\n\n" +
+		"## Requirements\n- REQ-001: Ship the feature.\n\n" +
+		"## Deliverables\n- `index.js` (REQ-001)\n\n" +
+		"## Acceptance Criteria\n" +
+		"| # | REQ     | Criterion   | Evidence       | Threshold |\n" +
+		"|---|---------|-------------|----------------|-----------|\n" +
+		"| 1 | REQ-001 | Works fine  | tests:works    | 8/10      |\n"
+	if err := os.WriteFile(contractPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeSetup(t, root, `{"planning_mode":"spec-driven"}`)
+
+	st, err := NewManager(root).Propose(1)
+	if err != nil {
+		t.Fatalf("expected compliant contract to be proposed, got %v", err)
+	}
+	if st.State != "proposed" {
+		t.Fatalf("expected proposed state, got %+v", st)
+	}
+}
+
+func writeSetup(t *testing.T, root, payload string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(root, "setup.json"), []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

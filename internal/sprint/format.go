@@ -101,6 +101,15 @@ func (q *QAResult) ReportPath() string {
 	return q.reportPath
 }
 
+// Verdict returns "PASS" or "FAIL" so the CLI can map the value to a
+// process exit code (needed by the pre-commit hook).
+func (q *QAResult) Verdict() string {
+	if q == nil || q.result == nil {
+		return ""
+	}
+	return q.result.Verdict
+}
+
 type findingForSort struct {
 	msg  string
 	rank int
