@@ -12,11 +12,11 @@ import (
 )
 
 type installHookOptions struct {
-	CLI            string
-	Skills         string
-	Planning       string
-	Interactive    bool
-	InstallGit     bool
+	CLI              string
+	Skills           string
+	Planning         string
+	Interactive      bool
+	InstallGit       bool
 	InstallPreCommit bool
 }
 

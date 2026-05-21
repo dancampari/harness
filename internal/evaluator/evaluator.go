@@ -70,12 +70,12 @@ type EvaluationResult struct {
 }
 
 type ProcessInfo struct {
-	PID                  int    `json:"pid"`
-	ParentPID            int    `json:"parent_pid"`
-	Isolated             bool   `json:"isolated"`
-	ContextEnvStripped   bool   `json:"context_env_stripped"`
-	AcceptingScreenshots bool   `json:"accepting_screenshots"`
-	AcceptingFixtures    bool   `json:"accepting_fixtures"`
+	PID                  int  `json:"pid"`
+	ParentPID            int  `json:"parent_pid"`
+	Isolated             bool `json:"isolated"`
+	ContextEnvStripped   bool `json:"context_env_stripped"`
+	AcceptingScreenshots bool `json:"accepting_screenshots"`
+	AcceptingFixtures    bool `json:"accepting_fixtures"`
 	// WorkspaceSHA is the deterministic content hash of the working tree
 	// computed by internal/workspace at QA time. harness sprint score
 	// rejects consolidation when this no longer matches, so reports
@@ -101,9 +101,9 @@ type ContractCheckResult struct {
 // removes the contract dimension entirely; used by watch runs that are
 // not gating a specific sprint promise.
 type Options struct {
-	Fast           bool
-	IncludeAudits  bool
-	SkipContract   bool
+	Fast          bool
+	IncludeAudits bool
+	SkipContract  bool
 }
 
 // Evaluate runs configured sensors against root and aggregates results.

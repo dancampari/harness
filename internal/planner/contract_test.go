@@ -270,8 +270,8 @@ The contract dimension must fail when declared evidence is absent.
 		t.Fatalf("expected 3 unmet criteria, got %d (%v)", len(res.UnmetCriteria), res.UnmetCriteria)
 	}
 	expected := map[string]bool{
-		"REQ-001 (criterion #1) evidence `tests:handles invalid input` not found in any test file": false,
-		"REQ-001 (criterion #2) e2e spec `tests/e2e/feature.spec.ts` does not exist":               false,
+		"REQ-001 (criterion #1) evidence `tests:handles invalid input` not found in any test file":       false,
+		"REQ-001 (criterion #2) e2e spec `tests/e2e/feature.spec.ts` does not exist":                     false,
 		"REQ-001 (criterion #3) approved fixture `invalid-input-400` is missing from .harness/fixtures/": false,
 	}
 	for _, msg := range res.UnmetCriteria {

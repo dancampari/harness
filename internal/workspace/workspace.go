@@ -23,20 +23,20 @@ import (
 // Anything inside these directories is considered transient and should
 // not affect the agreement between QA and consolidation.
 var SkippedDirs = map[string]bool{
-	".git":         true,
-	".harness":     true,
-	"node_modules": true,
-	"dist":         true,
-	"build":        true,
-	"coverage":     true,
-	"target":       true,
-	".next":        true,
-	".cache":       true,
-	".turbo":       true,
+	".git":          true,
+	".harness":      true,
+	"node_modules":  true,
+	"dist":          true,
+	"build":         true,
+	"coverage":      true,
+	"target":        true,
+	".next":         true,
+	".cache":        true,
+	".turbo":        true,
 	".pytest_cache": true,
-	"__pycache__":  true,
-	"venv":         true,
-	".venv":        true,
+	"__pycache__":   true,
+	"venv":          true,
+	".venv":         true,
 }
 
 // MaxFileBytes caps per-file content read so very large generated assets

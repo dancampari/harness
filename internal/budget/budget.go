@@ -30,10 +30,10 @@ type File struct {
 
 // Snapshot is the result of inspecting a harness directory.
 type Snapshot struct {
-	HarnessDir   string `json:"harness_dir"`
-	Files        []File `json:"files"`
-	TotalBytes   int64  `json:"total_bytes"`
-	TokenEstimate int64 `json:"token_estimate"`
+	HarnessDir    string `json:"harness_dir"`
+	Files         []File `json:"files"`
+	TotalBytes    int64  `json:"total_bytes"`
+	TokenEstimate int64  `json:"token_estimate"`
 	// SoftLimitTokens is the threshold beyond which the snapshot is
 	// considered to be eating into useful working memory. Doctor warns
 	// above this value.

@@ -34,12 +34,12 @@ const schemaVersion = "1"
 
 // Report captures one drift-watch run.
 type Report struct {
-	SchemaVersion string                  `json:"schema_version"`
-	Timestamp     time.Time               `json:"timestamp"`
-	Findings      int                     `json:"findings"`
-	Dimensions    map[string]DimSummary   `json:"dimensions"`
+	SchemaVersion string                   `json:"schema_version"`
+	Timestamp     time.Time                `json:"timestamp"`
+	Findings      int                      `json:"findings"`
+	Dimensions    map[string]DimSummary    `json:"dimensions"`
 	Sensors       []evaluator.SensorStatus `json:"sensors"`
-	Delta         *Delta                  `json:"delta,omitempty"`
+	Delta         *Delta                   `json:"delta,omitempty"`
 }
 
 // DimSummary is a compact per-dimension projection of the underlying
@@ -56,11 +56,11 @@ type DimSummary struct {
 // findings that were not present last time — exactly what cron is
 // looking for.
 type Delta struct {
-	Compared          string         `json:"compared"` // path of previous report
-	FindingsBefore    int            `json:"findings_before"`
-	FindingsAfter     int            `json:"findings_after"`
-	Regressed         int            `json:"regressed"` // positive when after > before
-	DimensionDeltas   map[string]int `json:"dimension_deltas"`
+	Compared        string         `json:"compared"` // path of previous report
+	FindingsBefore  int            `json:"findings_before"`
+	FindingsAfter   int            `json:"findings_after"`
+	Regressed       int            `json:"regressed"` // positive when after > before
+	DimensionDeltas map[string]int `json:"dimension_deltas"`
 }
 
 // Result wraps the report with file paths so the CLI can show them.

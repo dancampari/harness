@@ -75,8 +75,8 @@ type reviewInput struct {
 
 // reviewOutput is the JSON document the reviewer command emits on stdout.
 type reviewOutput struct {
-	SchemaVersion string           `json:"schema_version"`
-	Findings      []reviewFinding  `json:"findings"`
+	SchemaVersion string          `json:"schema_version"`
+	Findings      []reviewFinding `json:"findings"`
 }
 
 type reviewFinding struct {
