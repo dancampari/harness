@@ -265,6 +265,8 @@ func installClaudeHooks(planningMode string) error {
 	hooks := objectValue(settings, "hooks")
 	invoke := harnessInvocation()
 	appendClaudeHook(hooks, "PreToolUse", "Edit|MultiEdit|Write", invoke+" guard pre-tool")
+	appendClaudeHook(hooks, "PostToolUse", "Edit|MultiEdit|Write", invoke+" guard post-tool")
+	appendClaudeHook(hooks, "PostToolUse", "Bash", invoke+" guard post-tool")
 	appendClaudeHook(hooks, "Stop", "*", invoke+" sprint qa --format=json")
 	appendClaudeHook(hooks, "PostToolUse", "Bash(git commit*)", invoke+" sprint qa --format=tty")
 
@@ -395,6 +397,7 @@ func installCodexHookConfig() error {
 	}
 	root := objectValue(hooks, "hooks")
 	appendCodexHook(root, "PreToolUse", "apply_patch|Edit|MultiEdit|Write", harnessInvocation()+" guard pre-tool")
+	appendCodexHook(root, "PostToolUse", "apply_patch|Edit|MultiEdit|Write|Bash|Shell", harnessInvocation()+" guard post-tool")
 	content, err := json.MarshalIndent(hooks, "", "  ")
 	if err != nil {
 		return err

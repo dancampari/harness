@@ -96,45 +96,157 @@ func (m *model) renderHeader(width int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// liveActive reports whether the realtime panel should be shown: either
-// a command was launched from the TUI, or run-progress.json shows a QA
-// run in flight (which may have been launched by an agent elsewhere).
+// activityWindow bounds how recently a pipeline event must have fired
+// for the agent-activity panel to count the harness as "working".
+const activityWindow = 90 * time.Second
+
+// liveActive reports whether the realtime panel should be shown. It is
+// true when a command was launched from the TUI, when run-progress.json
+// shows a QA run in flight, or when the activity log shows the agent
+// recently working in any phase (contract, build, qa, report).
 func (m *model) liveActive() bool {
-	return m.commandBusy || m.data.Progress.Active()
+	return m.commandBusy || m.data.Progress.Active() || m.recentAgentActivity()
+}
+
+// recentAgentActivity reports whether the newest pipeline event in the
+// activity log fired within activityWindow.
+func (m *model) recentAgentActivity() bool {
+	for _, ev := range m.data.Events {
+		if !isPipelineEvent(ev) {
+			continue
+		}
+		return !ev.Timestamp.IsZero() && time.Since(ev.Timestamp) < activityWindow
+	}
+	return false
+}
+
+// isPipelineEvent reports whether an event belongs to the harness
+// pipeline (contract authoring, agent build edits, QA, scoring) — the
+// events worth surfacing in the live activity panel.
+func isPipelineEvent(ev ActivityEvent) bool {
+	if ev.Phase != "" {
+		return true
+	}
+	for _, prefix := range []string{"agent.", "contract.", "qa.", "sprint.", "repair."} {
+		if strings.HasPrefix(ev.Type, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// activityPhase returns the phase and timestamp of the newest pipeline
+// event, falling back to a type-derived phase when the event predates
+// the phase field.
+func (m *model) activityPhase() (string, time.Time) {
+	for _, ev := range m.data.Events {
+		if !isPipelineEvent(ev) {
+			continue
+		}
+		if ev.Phase != "" {
+			return ev.Phase, ev.Timestamp
+		}
+		return phaseForEventType(ev.Type), ev.Timestamp
+	}
+	return "", time.Time{}
+}
+
+func phaseForEventType(t string) string {
+	switch {
+	case strings.HasPrefix(t, "contract."):
+		return "contract"
+	case strings.HasPrefix(t, "agent."):
+		return "build"
+	case strings.HasPrefix(t, "qa."):
+		return "qa"
+	case strings.HasPrefix(t, "sprint."), strings.HasPrefix(t, "repair."):
+		return "report"
+	default:
+		return "working"
+	}
 }
 
 // renderLiveCommand is the realtime feedback panel shown under the nav
-// bar whenever the harness is working. It has two layers:
+// bar whenever the harness is working. It has three layers, picked by
+// priority:
 //
-//   - a structured progress checklist (current phase + per-sensor
-//     state) sourced from .harness/run-progress.json, which the
-//     evaluator updates live — visible even when the QA run was
-//     triggered by an agent rather than the TUI;
-//   - the streamed stdout/stderr tail of a command launched from the
-//     TUI itself.
+//   - QA progress: a structured per-sensor checklist sourced from
+//     .harness/run-progress.json (richest; shown when QA is in flight);
+//   - agent activity: the recent pipeline events from the activity log
+//     — agent edits, agent commands, contract and scoring milestones —
+//     so the Build and Contract phases are visible, not just QA;
+//   - command stream: the streamed stdout/stderr tail of a command
+//     launched from the TUI itself.
 //
-// Either layer renders on its own; when both are present the structured
-// checklist leads and the raw output tail follows.
+// Whichever phase layer applies leads; a TUI-launched command's raw
+// output tail renders below it.
 func (m *model) renderLiveCommand(width int) string {
 	prog := m.data.Progress
 	progActive := prog.Active()
+	agentActive := !progActive && m.recentAgentActivity()
 
 	title := strings.TrimSpace(m.commandRun)
-	if title == "" && progActive {
-		title = fmt.Sprintf("QA sprint %03d", prog.SprintNumber)
+	if title == "" {
+		switch {
+		case progActive:
+			title = fmt.Sprintf("QA sprint %03d", prog.SprintNumber)
+		case agentActive:
+			title = "agent activity"
+		}
 	}
 	lines := []string{section("Live · "+defaultString(title, "harness"), width)}
 
-	if progActive {
+	switch {
+	case progActive:
 		lines = append(lines, m.renderProgressBody(prog, width)...)
+	case agentActive:
+		lines = append(lines, m.renderAgentActivity(width)...)
 	}
 	if m.commandBusy {
-		if progActive {
+		if progActive || agentActive {
 			lines = append(lines, "")
 		}
-		lines = append(lines, m.renderStreamTail(width, progActive)...)
+		lines = append(lines, m.renderStreamTail(width, progActive || agentActive)...)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// renderAgentActivity renders the phase line plus the recent pipeline
+// events so the human sees the agent working through Contract and Build
+// — the phases the harness was previously blind to.
+func (m *model) renderAgentActivity(width int) []string {
+	phase, last := m.activityPhase()
+	since := "just now"
+	if !last.IsZero() {
+		since = compactDuration(time.Since(last)) + " ago"
+	}
+	lines := []string{
+		styles.Warning.Render(spinner(m.frame)) + " " +
+			styles.Text.Render(progressPhaseLabel(phase)) + "   " +
+			styles.Muted.Render("last activity "+since),
+		"",
+	}
+	limit := 6
+	switch modeFor(m.width, m.height) {
+	case modeWide:
+		limit = 10
+	case modeMedium:
+		limit = 8
+	}
+	shown := 0
+	for _, ev := range m.data.Events {
+		if !isPipelineEvent(ev) {
+			continue
+		}
+		lines = append(lines, renderActivityRow(ev, width))
+		if shown++; shown >= limit {
+			break
+		}
+	}
+	if shown == 0 {
+		lines = append(lines, styles.Faint.Render("  waiting for agent activity"+symbols().Ell))
+	}
+	return lines
 }
 
 // renderProgressBody renders the phase line and the per-sensor checklist

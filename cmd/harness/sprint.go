@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/dancampari/harness/internal/agreement"
+	"github.com/dancampari/harness/internal/events"
 	"github.com/dancampari/harness/internal/sprint"
 	"github.com/spf13/cobra"
 )
@@ -44,6 +45,8 @@ func newSprintNewCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			events.Record(".harness", "contract.created", events.PhaseContract,
+				fmt.Sprintf("sprint %03d · %s", n, goal), "")
 			fmt.Printf("✓ Created %s (sprint %03d)\n", path, n)
 			fmt.Println("  Next: fill the contract, then run harness contract propose.")
 			fmt.Println("  Implementation starts only after planner/tester agreement.")
@@ -122,6 +125,7 @@ users never pass it; the parent process sets it when forking.`,
 			if err != nil {
 				return err
 			}
+			events.Record(".harness", "qa.finished", events.PhaseQA, result.Verdict(), "")
 			switch format {
 			case "json":
 				if err := result.WriteJSON(os.Stdout); err != nil {
@@ -173,6 +177,8 @@ func newSprintScoreCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			events.Record(".harness", "sprint.scored", events.PhaseReport,
+				fmt.Sprintf("sprint %03d · %s · %d/100", report.SprintNumber, report.Verdict, report.Score.Total), "")
 			fmt.Printf("✓ Sprint %03d scored: %d/100 (%s)\n",
 				report.SprintNumber, report.Score.Total, report.Verdict)
 			fmt.Printf("  Report: %s\n", report.Path)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/dancampari/harness/internal/agreement"
+	"github.com/dancampari/harness/internal/events"
 	"github.com/spf13/cobra"
 )
 
@@ -52,6 +53,8 @@ func newContractProposeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			events.Record(".harness", "contract.proposed", events.PhaseContract,
+				fmt.Sprintf("sprint %03d", st.SprintNumber), "")
 			printAgreementStatus(st)
 			return nil
 		},
@@ -71,6 +74,12 @@ func newContractApproveCmd() *cobra.Command {
 			st, err := mgr.Approve(sprintNumber, role)
 			if err != nil {
 				return err
+			}
+			events.Record(".harness", "contract.approved", events.PhaseContract,
+				fmt.Sprintf("%s · sprint %03d", role, st.SprintNumber), "")
+			if strings.EqualFold(st.State, "agreed") {
+				events.Record(".harness", "contract.agreed", events.PhaseContract,
+					fmt.Sprintf("sprint %03d", st.SprintNumber), "")
 			}
 			printAgreementStatus(st)
 			return nil
@@ -95,6 +104,8 @@ func newContractRejectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			events.Record(".harness", "contract.rejected", events.PhaseContract,
+				fmt.Sprintf("%s · sprint %03d · %s", role, st.SprintNumber, reason), "")
 			printAgreementStatus(st)
 			return nil
 		},

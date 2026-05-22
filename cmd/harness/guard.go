@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/dancampari/harness/internal/agreement"
+	"github.com/dancampari/harness/internal/events"
 	"github.com/spf13/cobra"
 )
 
@@ -44,15 +45,21 @@ func newGuardCmd() *cobra.Command {
 			return runGuardPreTool(os.Stdin, os.Stdout)
 		},
 	})
+	cmd.AddCommand(&cobra.Command{
+		Use:    "post-tool",
+		Short:  "PostToolUse activity recorder",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGuardPostTool(os.Stdin)
+		},
+	})
 	return cmd
 }
 
 func runGuardPreTool(input io.Reader, output io.Writer) error {
 	var hook preToolHookInput
 	if err := json.NewDecoder(input).Decode(&hook); err != nil {
-		if err == io.EOF {
-			return nil
-		}
 		return nil
 	}
 	tool := strings.TrimSpace(hook.ToolName)
@@ -69,12 +76,24 @@ func runGuardPreTool(input io.Reader, output io.Writer) error {
 	if !ok {
 		return nil
 	}
-	st, err := agreement.NewManager(harnessDir).Status(0)
-	if err != nil || strings.EqualFold(st.State, "agreed") {
+	targets := hookTargetPaths(hook)
+	st, stErr := agreement.NewManager(harnessDir).Status(0)
+	agreed := stErr == nil && strings.EqualFold(st.State, "agreed")
+
+	// Record the edit attempt so the harness sees the Build phase
+	// happening live. Before agreement the agent is still in the
+	// contract loop; after it, the agent is implementing.
+	phase := events.PhaseBuild
+	if !agreed {
+		phase = events.PhaseContract
+	}
+
+	if stErr != nil || agreed {
+		recordAgentEdit(harnessDir, "agent.edit", phase, targets)
 		return nil
 	}
-	targets := hookTargetPaths(hook)
 	if len(targets) == 0 {
+		recordAgentEdit(harnessDir, "agent.edit.blocked", phase, []string{tool})
 		return writePreToolDeny(output, fmt.Sprintf(
 			"Harness blocked %s because sprint %03d contract is %s and the target path could not be verified. Do not edit product files before planner/tester agreement.",
 			tool, st.SprintNumber, strings.ToUpper(st.State),
@@ -82,10 +101,75 @@ func runGuardPreTool(input io.Reader, output io.Writer) error {
 	}
 	for _, target := range targets {
 		if !isPreAgreementControlPath(projectRoot, target) {
+			recordAgentEdit(harnessDir, "agent.edit.blocked", phase,
+				[]string{displayHookPath(projectRoot, target)})
 			return denyPreAgreementWrite(output, tool, projectRoot, target, st)
 		}
 	}
+	recordAgentEdit(harnessDir, "agent.edit", phase, targets)
 	return nil
+}
+
+// recordAgentEdit appends one activity event describing an agent edit.
+// Multiple target paths are collapsed into a single message so the
+// activity stream stays one line per tool call.
+func recordAgentEdit(harnessDir, eventType, phase string, targets []string) {
+	msg := strings.Join(targets, ", ")
+	if msg == "" {
+		msg = "(unknown path)"
+	}
+	events.Record(harnessDir, eventType, phase, msg, "")
+}
+
+// runGuardPostTool records a completed agent tool call (notably Bash
+// commands) so the activity log captures what the agent runs, not just
+// what it edits. It never blocks: PostToolUse fires after the fact.
+func runGuardPostTool(input io.Reader) error {
+	var hook preToolHookInput
+	if err := json.NewDecoder(input).Decode(&hook); err != nil {
+		return nil
+	}
+	start := hook.CWD
+	if start == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			start = cwd
+		}
+	}
+	_, harnessDir, ok := findHarnessDir(start)
+	if !ok {
+		return nil
+	}
+	tool := strings.TrimSpace(hook.ToolName)
+	switch tool {
+	case "Bash", "Shell", "shell", "run":
+		cmd := hookCommandText(hook)
+		if cmd == "" {
+			return nil
+		}
+		events.Record(harnessDir, "agent.bash", events.PhaseBuild, cmd, "")
+	}
+	return nil
+}
+
+// hookCommandText extracts the command string from a Bash-like tool
+// payload, trimming it to a single readable line.
+func hookCommandText(hook preToolHookInput) string {
+	for _, key := range []string{"command", "cmd", "script"} {
+		if value, ok := hook.ToolInput[key].(string); ok {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if idx := strings.IndexByte(value, '\n'); idx >= 0 {
+				value = strings.TrimSpace(value[:idx]) + " …"
+			}
+			if len(value) > 160 {
+				value = value[:160] + "…"
+			}
+			return value
+		}
+	}
+	return ""
 }
 
 func denyPreAgreementWrite(output io.Writer, tool, projectRoot, target string, st agreement.Status) error {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/dancampari/harness/internal/agreement"
+	"github.com/dancampari/harness/internal/events"
 )
 
 func TestGuardBlocksProductPatchBeforeAgreement(t *testing.T) {
@@ -80,6 +81,87 @@ func TestGuardAllowsProductPatchAfterAgreement(t *testing.T) {
 	}
 	if output.Len() != 0 {
 		t.Fatalf("expected product edit to be allowed after agreement, got %s", output.String())
+	}
+}
+
+func TestGuardPreToolRecordsBlockedEdit(t *testing.T) {
+	root := t.TempDir()
+	writeGuardContract(t, root)
+
+	input := strings.NewReader(`{
+  "cwd": ` + quoteJSON(root) + `,
+  "tool_name": "Write",
+  "tool_input": {"file_path": "src/App.tsx"}
+}`)
+	var output bytes.Buffer
+	if err := runGuardPreTool(input, &output); err != nil {
+		t.Fatal(err)
+	}
+	recent := events.Recent(filepath.Join(root, ".harness"), 10)
+	if len(recent) == 0 {
+		t.Fatal("expected the guard to record an activity event")
+	}
+	if recent[0].Type != "agent.edit.blocked" {
+		t.Fatalf("expected agent.edit.blocked event, got %q", recent[0].Type)
+	}
+	if recent[0].Phase != events.PhaseContract {
+		t.Fatalf("expected blocked edit recorded under the contract phase, got %q", recent[0].Phase)
+	}
+}
+
+func TestGuardPreToolRecordsBuildEditAfterAgreement(t *testing.T) {
+	root := t.TempDir()
+	writeGuardContract(t, root)
+	mgr := agreement.NewManager(filepath.Join(root, ".harness"))
+	if _, err := mgr.Propose(1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.Approve(1, "planner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.Approve(1, "tester"); err != nil {
+		t.Fatal(err)
+	}
+
+	input := strings.NewReader(`{
+  "cwd": ` + quoteJSON(root) + `,
+  "tool_name": "Write",
+  "tool_input": {"file_path": "src/App.tsx"}
+}`)
+	var output bytes.Buffer
+	if err := runGuardPreTool(input, &output); err != nil {
+		t.Fatal(err)
+	}
+	recent := events.Recent(filepath.Join(root, ".harness"), 10)
+	if len(recent) == 0 || recent[0].Type != "agent.edit" {
+		t.Fatalf("expected agent.edit event after agreement, got %+v", recent)
+	}
+	if recent[0].Phase != events.PhaseBuild {
+		t.Fatalf("expected edit recorded under the build phase, got %q", recent[0].Phase)
+	}
+	if recent[0].Message != "src/App.tsx" {
+		t.Fatalf("expected the edited path in the event, got %q", recent[0].Message)
+	}
+}
+
+func TestGuardPostToolRecordsBashCommand(t *testing.T) {
+	root := t.TempDir()
+	writeGuardContract(t, root)
+
+	input := strings.NewReader(`{
+  "cwd": ` + quoteJSON(root) + `,
+  "tool_name": "Bash",
+  "tool_input": {"command": "npm test"}
+}`)
+	if err := runGuardPostTool(input); err != nil {
+		t.Fatal(err)
+	}
+	recent := events.Recent(filepath.Join(root, ".harness"), 10)
+	if len(recent) == 0 || recent[0].Type != "agent.bash" {
+		t.Fatalf("expected agent.bash event, got %+v", recent)
+	}
+	if recent[0].Message != "npm test" {
+		t.Fatalf("expected the command text in the event, got %q", recent[0].Message)
 	}
 }
 

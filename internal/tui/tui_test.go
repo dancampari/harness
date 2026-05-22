@@ -488,6 +488,55 @@ func TestLivePanelHiddenWhenProgressDone(t *testing.T) {
 	}
 }
 
+func TestLivePanelShowsAgentActivityAcrossPhases(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	// An events.jsonl with recent build-phase activity simulates the
+	// agent implementing the contract — a phase the harness was blind
+	// to before. No run-progress.json, no TUI-launched command.
+	recent := time.Now().UTC().Format(time.RFC3339Nano)
+	older := time.Now().Add(-20 * time.Second).UTC().Format(time.RFC3339Nano)
+	eventsJSONL := `{"timestamp":"` + older + `","type":"contract.agreed","phase":"contract","message":"sprint 004"}
+{"timestamp":"` + recent + `","type":"agent.edit","phase":"build","message":"src/feature.ts","agent":"codex"}
+{"timestamp":"` + recent + `","type":"agent.bash","phase":"build","message":"npm test"}
+`
+	if err := os.WriteFile(filepath.Join(harnessDir, "events.jsonl"), []byte(eventsJSONL), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 132
+	m.height = 36
+
+	if !m.recentAgentActivity() {
+		t.Fatal("expected recentAgentActivity() to be true with fresh build events")
+	}
+	if !m.liveActive() {
+		t.Fatal("expected liveActive() to be true while the agent is working in the build phase")
+	}
+	view := stripANSI(m.View())
+	for _, want := range []string{"agent.edit", "agent.bash", "src/feature.ts", "last activity"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected agent activity panel to show %q\n%s", want, view)
+		}
+	}
+}
+
+func TestRecentAgentActivityIgnoresStaleEvents(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	stale := time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339Nano)
+	eventsJSONL := `{"timestamp":"` + stale + `","type":"agent.edit","phase":"build","message":"src/old.ts"}
+`
+	if err := os.WriteFile(filepath.Join(harnessDir, "events.jsonl"), []byte(eventsJSONL), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(harnessDir, true, "dev")
+	m.width = 120
+	m.height = 32
+	if m.recentAgentActivity() {
+		t.Fatal("expected stale events (10m old) to not count as recent activity")
+	}
+}
+
 func writeHarnessFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

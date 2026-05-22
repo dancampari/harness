@@ -76,6 +76,7 @@ type QualityDimension struct {
 type ActivityEvent struct {
 	Timestamp time.Time      `json:"-"`
 	Type      string         `json:"type"`
+	Phase     string         `json:"phase"`
 	Message   string         `json:"message"`
 	Agent     string         `json:"agent"`
 	Metadata  map[string]any `json:"metadata"`
@@ -559,6 +560,7 @@ func loadRecentEvents(harnessDir string, current RunRecord, limit int) []Activit
 			var raw struct {
 				Timestamp *time.Time     `json:"timestamp"`
 				Type      string         `json:"type"`
+				Phase     string         `json:"phase"`
 				Message   string         `json:"message"`
 				Agent     string         `json:"agent"`
 				Metadata  map[string]any `json:"metadata"`
@@ -568,6 +570,7 @@ func loadRecentEvents(harnessDir string, current RunRecord, limit int) []Activit
 			}
 			ev := ActivityEvent{
 				Type:     raw.Type,
+				Phase:    raw.Phase,
 				Message:  raw.Message,
 				Agent:    raw.Agent,
 				Metadata: raw.Metadata,

@@ -11,8 +11,18 @@ Post-0.9.0 fixes and the realtime TUI work.
 
 ### Added
 
-- **Realtime progress tracking.** New `internal/progress` package: the
-  evaluator publishes a live snapshot to `.harness/run-progress.json`
+- **Whole-pipeline activity log.** New `internal/events` package: every
+  stage now appends to `.harness/events.jsonl`. The PreToolUse guard
+  records each agent edit (`agent.edit` / `agent.edit.blocked`), a new
+  PostToolUse hook records agent commands (`agent.bash`), and the
+  contract/sprint subcommands record their milestones
+  (`contract.created`, `contract.proposed`, `contract.agreed`,
+  `qa.finished`, `sprint.scored`). The TUI's live panel gained a third
+  layer — an agent-activity stream — so the Contract and Build phases
+  are visible in real time, not just QA. Previously the harness was
+  blind to everything the coding CLI did between sprints.
+- **Realtime QA progress tracking.** New `internal/progress` package:
+  the evaluator publishes a live snapshot to `.harness/run-progress.json`
   (current phase plus per-sensor state), rewritten atomically on every
   change. The TUI polls it and renders a structured checklist —
   current phase, a spinner on the running sensor, and pass/skip/error
