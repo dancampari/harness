@@ -11,6 +11,7 @@ import (
 	"github.com/dancampari/harness/internal/budget"
 	"github.com/dancampari/harness/internal/config"
 	"github.com/dancampari/harness/internal/detect"
+	"github.com/dancampari/harness/internal/events"
 	"github.com/spf13/cobra"
 )
 
@@ -370,6 +371,7 @@ func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doct
 	}
 
 	checkGitHooks(root)
+	checkGuardHealth(harnessDir)
 	checkDriftWatch(root)
 	checkContextBudget(harnessDir)
 	if cfg, err := config.Load(filepath.Join(harnessDir, "config.yaml")); err == nil {
@@ -431,6 +433,23 @@ func checkInferentialReviewer(cfg config.Config, audit *doctorAudit) {
 		return
 	}
 	fmt.Printf("  OK   inferential reviewer configured (%s)\n", cfg.Review.Command[0])
+}
+
+// checkGuardHealth surfaces guard hook failures. The guard fails open
+// (it never blocks the agent on bad input) and so a misconfigured hook
+// — wrong payload shape, bad encoding — would otherwise pass unnoticed.
+// Recorded guard.warn events make it visible here.
+func checkGuardHealth(harnessDir string) {
+	recent := events.Recent(harnessDir, 200)
+	warns := 0
+	for _, e := range recent {
+		if e.Type == "guard.warn" {
+			warns++
+		}
+	}
+	if warns > 0 {
+		fmt.Printf("  WARN guard reported %d hook payload error(s); the coding CLI hooks may be misconfigured (see .harness/events.jsonl)\n", warns)
+	}
 }
 
 // checkContextBudget surfaces how much agent context the harness memory

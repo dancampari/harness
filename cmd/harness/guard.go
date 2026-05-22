@@ -60,19 +60,14 @@ func newGuardCmd() *cobra.Command {
 func runGuardPreTool(input io.Reader, output io.Writer) error {
 	var hook preToolHookInput
 	if err := json.NewDecoder(input).Decode(&hook); err != nil {
+		guardDiagnostic("PreToolUse hook payload could not be decoded: " + err.Error())
 		return nil
 	}
 	tool := strings.TrimSpace(hook.ToolName)
 	if tool != "Edit" && tool != "MultiEdit" && tool != "Write" && tool != "apply_patch" {
 		return nil
 	}
-	start := hook.CWD
-	if start == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			start = cwd
-		}
-	}
-	projectRoot, harnessDir, ok := findHarnessDir(start)
+	projectRoot, harnessDir, ok := resolveHarnessDir(hook.CWD)
 	if !ok {
 		return nil
 	}
@@ -127,15 +122,10 @@ func recordAgentEdit(harnessDir, eventType, phase string, targets []string) {
 func runGuardPostTool(input io.Reader) error {
 	var hook preToolHookInput
 	if err := json.NewDecoder(input).Decode(&hook); err != nil {
+		guardDiagnostic("PostToolUse hook payload could not be decoded: " + err.Error())
 		return nil
 	}
-	start := hook.CWD
-	if start == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			start = cwd
-		}
-	}
-	_, harnessDir, ok := findHarnessDir(start)
+	_, harnessDir, ok := resolveHarnessDir(hook.CWD)
 	if !ok {
 		return nil
 	}
@@ -219,6 +209,42 @@ func patchTargetPaths(patch string) []string {
 		}
 	}
 	return paths
+}
+
+// resolveHarnessDir locates the project root and .harness directory for
+// a hook invocation. It tries the hook-provided cwd first, then falls
+// back to the process working directory. The fallback matters because a
+// coding CLI may report a cwd in a path form Go cannot resolve on this
+// OS (for example a Unix-style path on Windows); without the fallback
+// the guard would silently do nothing.
+func resolveHarnessDir(hookCWD string) (string, string, bool) {
+	candidates := []string{hookCWD}
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, cwd)
+	}
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate) == "" {
+			continue
+		}
+		if projectRoot, harnessDir, ok := findHarnessDir(candidate); ok {
+			return projectRoot, harnessDir, true
+		}
+	}
+	return "", "", false
+}
+
+// guardDiagnostic surfaces a guard failure that would otherwise pass
+// unnoticed. A guard that cannot read its input must fail open (never
+// block the agent) but must not fail silent: the warning is recorded as
+// a guard.warn event so it shows in the TUI activity panel and in
+// `harness doctor`. When no .harness project is reachable at all, the
+// message goes to stderr, which coding CLIs surface in hook debug logs.
+func guardDiagnostic(message string) {
+	if _, harnessDir, ok := resolveHarnessDir(""); ok {
+		events.Record(harnessDir, "guard.warn", "", message, "")
+		return
+	}
+	fmt.Fprintln(os.Stderr, "harness guard: "+message)
 }
 
 func findHarnessDir(start string) (string, string, bool) {
