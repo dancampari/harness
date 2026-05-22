@@ -321,7 +321,28 @@ user-configured reviewer CLI.
       includes a minimal Python wrapper example, and explains why the
       adapter stays external instead of embedding an SDK.
 
-## v0.9.1 - Distribution Hardening
+## v0.9.1 - Realtime Observability
+
+The harness was only live during QA; it sat idle while the coding CLI
+authored a contract or implemented code. v0.9.1 makes every pipeline
+stage observable in real time. Full notes in `CHANGELOG.md`.
+
+- [x] `internal/events`: append-only `.harness/events.jsonl` activity log
+- [x] PreToolUse guard records each agent edit; new PostToolUse hook
+      records agent commands; contract/sprint subcommands record
+      milestones (`contract.*`, `qa.finished`, `sprint.scored`)
+- [x] `internal/progress`: evaluator publishes a live per-sensor QA
+      snapshot to `.harness/run-progress.json`, rewritten atomically
+- [x] TUI live panel: QA sensor checklist, agent-activity stream across
+      Contract/Build, and streamed command output — visible whether the
+      run was launched from the dashboard or by an agent
+- [x] Guard fails open but never silent: undecodable hook payloads
+      record a `guard.warn` event and surface in `harness doctor`;
+      robust cwd resolution with a process-cwd fallback
+- [x] TUI fixes: new sprint surfaces in Overview; Skills tab split into
+      Active Skills and Sensor Adapters
+
+## v0.10 - Distribution Hardening
 
 - [x] GitHub Actions CI for formatting, vet, tests, build, npm pack, and npm exec smoke
 - [x] GitHub Actions release job to cross-compile Linux/macOS/Windows for amd64/arm64

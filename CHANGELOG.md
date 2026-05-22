@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project follows [Semantic Versioning](https://semver.org/) once
 production-ready.
 
-## [0.9.1] - Unreleased
+## [0.9.1] - 2026-05-22
 
 Post-0.9.0 fixes and the realtime TUI work.
 
