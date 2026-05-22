@@ -2,11 +2,51 @@ package evaluator
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/dancampari/harness/internal/config"
+	"github.com/dancampari/harness/internal/progress"
 	"github.com/dancampari/harness/internal/sensors"
 )
+
+func TestEvaluateReportsProgressToWriter(t *testing.T) {
+	cfg := config.Config{
+		Adapters: config.AdaptersConfig{
+			Lint: []string{"eslint"},
+		},
+		Thresholds: config.ThresholdsConfig{Correctness: 80, Contract: 80},
+		Weights:    config.DimensionWeights{Correctness: 50, Contract: 50},
+	}
+	registry := sensors.NewRegistry()
+	registry.Register(fakeSensor{name: "eslint", dimension: sensors.DimCorrectness, available: true, score: 100})
+
+	progressPath := filepath.Join(t.TempDir(), "run-progress.json")
+	writer := progress.NewWriter(progressPath, 4)
+
+	ev := New(cfg, registry)
+	check := ContractCheckResult{Status: "satisfied", Score: 100}
+	if _, err := ev.EvaluateWith(context.Background(), t.TempDir(), 4, check, Options{Progress: writer}); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, ok := progress.Read(progressPath)
+	if !ok {
+		t.Fatal("expected run-progress.json to exist after EvaluateWith")
+	}
+	if snap.Phase != progress.PhaseDone {
+		t.Fatalf("expected phase done after evaluation, got %q", snap.Phase)
+	}
+	if snap.Verdict != "PASS" {
+		t.Fatalf("expected verdict PASS, got %q", snap.Verdict)
+	}
+	if len(snap.Sensors) != 1 {
+		t.Fatalf("expected 1 sensor in progress, got %d", len(snap.Sensors))
+	}
+	if snap.Sensors[0].Name != "eslint" || snap.Sensors[0].State != progress.StateDone {
+		t.Fatalf("expected eslint to finish as done, got %+v", snap.Sensors[0])
+	}
+}
 
 func TestEvaluateFastSkipsSlowDimensions(t *testing.T) {
 	cfg := config.Config{

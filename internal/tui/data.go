@@ -15,6 +15,7 @@ import (
 	"github.com/dancampari/harness/internal/detect"
 	"github.com/dancampari/harness/internal/evaluator"
 	"github.com/dancampari/harness/internal/planner"
+	"github.com/dancampari/harness/internal/progress"
 )
 
 type DashboardData struct {
@@ -27,6 +28,7 @@ type DashboardData struct {
 	ReportPath     string
 	Skills         SkillState
 	Doctor         DoctorState
+	Progress       progress.Snapshot
 	LastEvent      string
 	LastSeen       time.Time
 }
@@ -175,6 +177,7 @@ func loadDashboardData(harnessDir string) DashboardData {
 	if lastEvent == "" {
 		lastEvent = "watching .harness"
 	}
+	runProgress, _ := progress.Read(filepath.Join(harnessDir, "run-progress.json"))
 	return DashboardData{
 		Project:        project,
 		Current:        current,
@@ -185,6 +188,7 @@ func loadDashboardData(harnessDir string) DashboardData {
 		ReportPath:     reportPath,
 		Skills:         skills,
 		Doctor:         doctor,
+		Progress:       runProgress,
 		LastEvent:      lastEvent,
 		LastSeen:       lastSeen,
 	}

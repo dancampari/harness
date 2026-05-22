@@ -196,7 +196,7 @@ func ensureHarnessGitignore(root string) error {
 	if b, err := os.ReadFile(path); err == nil {
 		existing = string(b)
 	}
-	lines := []string{"memory.db", "reports/", "repairs/", "screenshots/", "tmp/"}
+	lines := []string{"memory.db", "reports/", "repairs/", "screenshots/", "tmp/", "run-progress.json", "run-progress.json.tmp", "watch/"}
 	for _, line := range lines {
 		if !strings.Contains(existing, line) {
 			if existing != "" && !strings.HasSuffix(existing, "\n") {

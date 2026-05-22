@@ -419,6 +419,75 @@ func TestStartCommandStreamEmitsLinesAndExit(t *testing.T) {
 	}
 }
 
+func TestLivePanelRendersStructuredProgressChecklist(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	// A live run-progress.json: sensors phase, mixed sensor states.
+	// This simulates a QA run launched by an agent, not the TUI.
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	progressJSON := `{
+  "schema_version": "1",
+  "sprint_number": 4,
+  "phase": "sensors",
+  "started_at": "` + now + `",
+  "updated_at": "` + now + `",
+  "sensors": [
+    {"name": "eslint", "dimension": "correctness", "state": "done", "duration_seconds": 1.2},
+    {"name": "vitest", "dimension": "correctness", "state": "running"},
+    {"name": "playwright", "dimension": "e2e", "state": "pending"},
+    {"name": "npm-audit", "dimension": "security", "state": "skipped"}
+  ]
+}`
+	if err := os.WriteFile(filepath.Join(harnessDir, "run-progress.json"), []byte(progressJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 132
+	m.height = 36
+
+	if !m.liveActive() {
+		t.Fatal("expected liveActive() to be true while run-progress.json shows a sensors-phase run")
+	}
+	view := stripANSI(m.View())
+	for _, want := range []string{
+		"Live ·",
+		"running sensors",
+		"eslint",
+		"vitest",
+		"playwright",
+		"npm-audit",
+		"sensors settled",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected live progress panel to show %q\n%s", want, view)
+		}
+	}
+}
+
+func TestLivePanelHiddenWhenProgressDone(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	progressJSON := `{
+  "schema_version": "1",
+  "sprint_number": 4,
+  "phase": "done",
+  "verdict": "PASS",
+  "started_at": "` + now + `",
+  "updated_at": "` + now + `",
+  "sensors": []
+}`
+	if err := os.WriteFile(filepath.Join(harnessDir, "run-progress.json"), []byte(progressJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 132
+	m.height = 36
+	if m.liveActive() {
+		t.Fatal("expected liveActive() to be false once the run reached the done phase")
+	}
+}
+
 func writeHarnessFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

@@ -12,9 +12,24 @@ import (
 	"time"
 
 	"github.com/dancampari/harness/internal/config"
+	"github.com/dancampari/harness/internal/progress"
 	"github.com/dancampari/harness/internal/sensors"
 	"github.com/dancampari/harness/internal/workspace"
 )
+
+// sensorProgressState maps a finished sensor Result to a progress
+// state. A sensor "done" means it executed; pass/fail is a
+// dimension-level judgement surfaced in the final report, not here.
+func sensorProgressState(r sensors.Result) string {
+	switch {
+	case r.ToolMissing:
+		return progress.StateSkipped
+	case r.Error != "":
+		return progress.StateError
+	default:
+		return progress.StateDone
+	}
+}
 
 // Evaluator runs sensors and aggregates results. Stateless: a new instance per
 // run keeps concurrency simple and makes subprocess isolation easier to reason
@@ -104,6 +119,11 @@ type Options struct {
 	Fast          bool
 	IncludeAudits bool
 	SkipContract  bool
+	// Progress, when non-nil, receives live phase and per-sensor state
+	// updates so the TUI can render a real-time checklist. A nil value
+	// disables progress reporting; the *progress.Writer methods are all
+	// nil-safe.
+	Progress *progress.Writer
 }
 
 // Evaluate runs configured sensors against root and aggregates results.
@@ -125,15 +145,38 @@ func (e *Evaluator) EvaluateWith(ctx context.Context, root string, sprintNum int
 	}
 	results := make([]sensors.Result, len(configured.toRun))
 
+	// Seed the live progress snapshot: every configured sensor appears
+	// up front — available ones pending, unavailable ones skipped — so
+	// a watcher sees the full checklist before any sensor starts.
+	if opts.Progress != nil {
+		seed := make([]progress.Sensor, 0, len(configured.statuses))
+		for _, st := range configured.statuses {
+			state := progress.StatePending
+			if !st.Available {
+				state = progress.StateSkipped
+			}
+			seed = append(seed, progress.Sensor{
+				Name:      st.Name,
+				Dimension: st.Dimension,
+				State:     state,
+			})
+		}
+		opts.Progress.RegisterSensors(seed)
+		opts.Progress.SetPhase(progress.PhaseSensors)
+	}
+
 	var wg sync.WaitGroup
 	for i, s := range configured.toRun {
 		wg.Add(1)
 		go func(i int, s sensors.Sensor) {
 			defer wg.Done()
+			opts.Progress.SetSensorState(s.Name(), progress.StateRunning, 0)
 			results[i] = s.Run(ctx, root)
+			opts.Progress.SetSensorState(s.Name(), sensorProgressState(results[i]), results[i].Duration)
 		}(i, s)
 	}
 	wg.Wait()
+	opts.Progress.SetPhase(progress.PhaseAggregate)
 
 	for _, r := range results {
 		if idx, ok := configured.statusIndex[r.SensorName]; ok {
@@ -197,6 +240,7 @@ func (e *Evaluator) EvaluateWith(ctx context.Context, root string, sprintNum int
 			break
 		}
 	}
+	opts.Progress.Finish(verdict)
 
 	return &EvaluationResult{
 		SchemaVersion:   "2",

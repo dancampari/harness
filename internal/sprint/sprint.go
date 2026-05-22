@@ -32,6 +32,7 @@ import (
 	"github.com/dancampari/harness/internal/evaluator"
 	"github.com/dancampari/harness/internal/memory"
 	"github.com/dancampari/harness/internal/planner"
+	"github.com/dancampari/harness/internal/progress"
 	"github.com/dancampari/harness/internal/sensors"
 	"github.com/dancampari/harness/internal/workspace"
 )
@@ -283,6 +284,12 @@ func (m *Manager) RunQAInternalWith(stdout io.Writer, opts QAOptions) error {
 		return fmt.Errorf("resolve repo root: %w", err)
 	}
 
+	// Publish a live progress snapshot so the TUI (and any agent
+	// watching the run) sees the contract phase and the per-sensor
+	// checklist in real time. NewWriter flushes the contract phase
+	// immediately; the evaluator advances it through sensors and done.
+	prog := progress.NewWriter(filepath.Join(m.root, "run-progress.json"), n)
+
 	check := contract.CheckAgainstDiff(repoRoot)
 	ev := evaluator.New(m.cfg, adapters.BuildRegistry())
 	runTimeout := 15 * time.Minute
@@ -291,7 +298,10 @@ func (m *Manager) RunQAInternalWith(stdout io.Writer, opts QAOptions) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	result, err := ev.EvaluateWith(ctx, repoRoot, n, check, evaluator.Options{Fast: opts.Fast})
+	result, err := ev.EvaluateWith(ctx, repoRoot, n, check, evaluator.Options{
+		Fast:     opts.Fast,
+		Progress: prog,
+	})
 	if err != nil {
 		return err
 	}

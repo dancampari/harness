@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dancampari/harness/internal/progress"
 )
 
 func (m *model) View() string {
@@ -21,9 +22,10 @@ func (m *model) View() string {
 		m.renderNav(width),
 		"",
 	}
-	// The live command panel is injected above the active view so the
-	// realtime feedback is visible no matter which tab the user is on.
-	if m.commandBusy {
+	// The live panel is injected above the active view so the realtime
+	// feedback is visible no matter which tab the user is on — and no
+	// matter whether the run was launched from the TUI or by an agent.
+	if m.liveActive() {
 		parts = append(parts, m.renderLiveCommand(width), "")
 	}
 	switch m.activeView {
@@ -94,22 +96,112 @@ func (m *model) renderHeader(width int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// renderLiveCommand is the realtime feedback panel shown under the nav
-// bar whenever a command is running. It streams the command's combined
-// stdout/stderr line by line, with a spinner and elapsed-time counter,
-// so the user can see exactly what the harness is doing instead of
-// waiting for a silent process to finish.
-func (m *model) renderLiveCommand(width int) string {
-	header := section("Live · "+m.commandRun, width)
-	elapsed := compactDuration(time.Since(m.commandStarted))
-	statusLine := styles.Warning.Render(spinner(m.frame)) + " " +
-		styles.Text.Render("working") + "   " +
-		styles.Muted.Render("elapsed "+elapsed)
+// liveActive reports whether the realtime panel should be shown: either
+// a command was launched from the TUI, or run-progress.json shows a QA
+// run in flight (which may have been launched by an agent elsewhere).
+func (m *model) liveActive() bool {
+	return m.commandBusy || m.data.Progress.Active()
+}
 
-	lines := []string{header, statusLine}
+// renderLiveCommand is the realtime feedback panel shown under the nav
+// bar whenever the harness is working. It has two layers:
+//
+//   - a structured progress checklist (current phase + per-sensor
+//     state) sourced from .harness/run-progress.json, which the
+//     evaluator updates live — visible even when the QA run was
+//     triggered by an agent rather than the TUI;
+//   - the streamed stdout/stderr tail of a command launched from the
+//     TUI itself.
+//
+// Either layer renders on its own; when both are present the structured
+// checklist leads and the raw output tail follows.
+func (m *model) renderLiveCommand(width int) string {
+	prog := m.data.Progress
+	progActive := prog.Active()
+
+	title := strings.TrimSpace(m.commandRun)
+	if title == "" && progActive {
+		title = fmt.Sprintf("QA sprint %03d", prog.SprintNumber)
+	}
+	lines := []string{section("Live · "+defaultString(title, "harness"), width)}
+
+	if progActive {
+		lines = append(lines, m.renderProgressBody(prog, width)...)
+	}
+	if m.commandBusy {
+		if progActive {
+			lines = append(lines, "")
+		}
+		lines = append(lines, m.renderStreamTail(width, progActive)...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderProgressBody renders the phase line and the per-sensor checklist
+// from a live progress snapshot.
+func (m *model) renderProgressBody(prog progress.Snapshot, width int) []string {
+	elapsed := compactDuration(time.Since(prog.StartedAt))
+	phaseLine := styles.Warning.Render(spinner(m.frame)) + " " +
+		styles.Text.Render(progressPhaseLabel(prog.Phase)) + "   " +
+		styles.Muted.Render("elapsed "+elapsed)
+	lines := []string{phaseLine, ""}
+	if len(prog.Sensors) == 0 {
+		lines = append(lines, styles.Faint.Render("  preparing sensors"+symbols().Ell))
+		return lines
+	}
+	done := 0
+	for _, s := range prog.Sensors {
+		if s.State == "done" || s.State == "error" || s.State == "skipped" {
+			done++
+		}
+		lines = append(lines, m.renderSensorRow(s))
+	}
+	lines = append(lines, "", styles.Muted.Render(
+		fmt.Sprintf("  %d/%d sensors settled", done, len(prog.Sensors))))
+	return lines
+}
+
+// renderSensorRow renders one sensor's live state with a state-coloured
+// glyph; a running sensor shows the animated spinner.
+func (m *model) renderSensorRow(s progress.Sensor) string {
+	sym := symbols()
+	glyph, style := sym.Open, styles.Faint
+	detail := s.State
+	switch s.State {
+	case "done":
+		glyph, style = sym.Check, styles.Success
+		if s.Duration > 0 {
+			detail = compactSeconds(s.Duration)
+		}
+	case "running":
+		glyph, style = spinner(m.frame), styles.Warning
+	case "error":
+		glyph, style = sym.Cross, styles.Danger
+	case "skipped":
+		glyph, style = sym.Skip, styles.Faint
+	}
+	return style.Render("  "+glyph) + " " +
+		styles.Text.Render(padRight(s.Name, 18)) + " " +
+		styles.Muted.Render(padRight(s.Dimension, 13)) + " " +
+		style.Render(detail)
+}
+
+// renderStreamTail renders the streamed command output. withHeader is
+// true when the structured progress body already showed the spinner and
+// elapsed counter, so the tail just needs an "output" label.
+func (m *model) renderStreamTail(width int, withHeader bool) []string {
+	var lines []string
+	if withHeader {
+		lines = append(lines, styles.Muted.Render("  output"+symbols().Ell))
+	} else {
+		elapsed := compactDuration(time.Since(m.commandStarted))
+		lines = append(lines, styles.Warning.Render(spinner(m.frame))+" "+
+			styles.Text.Render("working")+"   "+
+			styles.Muted.Render("elapsed "+elapsed))
+	}
 	if len(m.commandLines) == 0 {
 		lines = append(lines, styles.Faint.Render("  waiting for output"+symbols().Ell))
-		return strings.Join(lines, "\n")
+		return lines
 	}
 	limit := 8
 	switch modeFor(m.width, m.height) {
@@ -119,16 +211,29 @@ func (m *model) renderLiveCommand(width int) string {
 		limit = 10
 	}
 	start := maxInt(0, len(m.commandLines)-limit)
-	shown := len(m.commandLines) - start
 	for _, raw := range m.commandLines[start:] {
-		clean := stripANSI(raw)
-		lines = append(lines, styles.Faint.Render("  "+truncate(clean, maxInt(8, width-2))))
+		lines = append(lines, styles.Faint.Render("  "+truncate(stripANSI(raw), maxInt(8, width-2))))
 	}
 	if start > 0 {
 		lines = append(lines, styles.Muted.Render(
-			fmt.Sprintf("  showing last %d of %d lines", shown, len(m.commandLines))))
+			fmt.Sprintf("  showing last %d of %d lines", len(m.commandLines)-start, len(m.commandLines))))
 	}
-	return strings.Join(lines, "\n")
+	return lines
+}
+
+func progressPhaseLabel(phase string) string {
+	switch phase {
+	case "contract":
+		return "checking contract"
+	case "sensors":
+		return "running sensors"
+	case "aggregate":
+		return "aggregating results"
+	case "done":
+		return "done"
+	default:
+		return defaultString(phase, "working")
+	}
 }
 
 func (m *model) renderNav(width int) string {

@@ -5,6 +5,36 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project follows [Semantic Versioning](https://semver.org/) once
 production-ready.
 
+## [0.9.1] - Unreleased
+
+Post-0.9.0 fixes and the realtime TUI work.
+
+### Added
+
+- **Realtime progress tracking.** New `internal/progress` package: the
+  evaluator publishes a live snapshot to `.harness/run-progress.json`
+  (current phase plus per-sensor state), rewritten atomically on every
+  change. The TUI polls it and renders a structured checklist —
+  current phase, a spinner on the running sensor, and pass/skip/error
+  glyphs — visible even when the QA run was launched by an agent
+  rather than from the dashboard.
+- **Live command streaming in the TUI.** Commands launched from the
+  dashboard stream their combined stdout/stderr line by line into a
+  panel under the nav bar, with an animated spinner and elapsed-time
+  counter, instead of blocking silently until the process exits.
+
+### Fixed
+
+- `harness sprint qa --fast` and the v0.9 sources are now gofmt-clean
+  (CI formatting gate).
+- The TUI Overview now surfaces a freshly created sprint as the current
+  run. Previously a sprint with no QA report carried a zero timestamp
+  and sorted as the oldest run, so the Overview showed a stale sprint
+  while the Runs tab listed the new one.
+- The Skills tab no longer mixes suggestions, category labels, and
+  sensor adapters into one list as if all were installable skills. It
+  now shows two clear sections: Active Skills and Sensor Adapters.
+
 ## [0.9.0] - Unreleased
 
 The v0.6 → v0.9 train closes every P0 and P1 item in
