@@ -396,8 +396,9 @@ func loadLegacyRuns(harnessDir string) []RunRecord {
 		}
 		var number int
 		fmt.Sscanf(entry.Name(), "sprint-%d.md", &number)
+		contractPath := filepath.Join(contractsDir, entry.Name())
 		feature := fmt.Sprintf("Sprint %03d", number)
-		if contract, err := planner.Parse(filepath.Join(contractsDir, entry.Name())); err == nil && contract.Title != "" {
+		if contract, err := planner.Parse(contractPath); err == nil && contract.Title != "" {
 			feature = contract.Title
 		}
 		run := RunRecord{
@@ -415,6 +416,14 @@ func loadLegacyRuns(harnessDir string) []RunRecord {
 				"report":   "pending",
 				"accept":   "pending",
 			},
+		}
+		// A freshly created sprint has no report, so UpdatedAt stays
+		// zero. Without a timestamp the run sorts as "oldest" and the
+		// Overview's selectCurrentRun never picks it. Seed StartedAt
+		// from the contract file mtime so a brand-new sprint sorts
+		// ahead of older, already-evaluated sprints.
+		if info, err := os.Stat(contractPath); err == nil {
+			run.StartedAt = info.ModTime()
 		}
 		ag, _ := agreement.NewManager(harnessDir).Status(number)
 		if ag.State != "" {

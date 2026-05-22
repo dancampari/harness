@@ -279,6 +279,68 @@ func TestOverviewPrefersActiveRunOverStaleCurrentRunFile(t *testing.T) {
 	}
 }
 
+func TestOverviewShowsNewlyCreatedSprintFromLegacyContracts(t *testing.T) {
+	root := t.TempDir()
+	harnessDir := filepath.Join(root, ".harness")
+	for _, dir := range []string{"contracts", "reports", "evaluations"} {
+		if err := os.MkdirAll(filepath.Join(harnessDir, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Sprint 001: already evaluated. Its report carries a timestamp far
+	// in the past so the sort cannot float it above a newer sprint.
+	writeLegacyContract(t, harnessDir, 1, "Older completed sprint")
+	oldReport := `{"schema_version":"2","timestamp":"2020-01-01T00:00:00Z","sprint_number":1,` +
+		`"total_score":90,"verdict":"PASS","dimensions":{},"duration_seconds":1}`
+	if err := os.WriteFile(filepath.Join(harnessDir, "reports", "sprint-001.json"), []byte(oldReport), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sprint 002: just created, no report. This is the run the Overview
+	// must surface as current even though it has no timestamp of its own.
+	writeLegacyContract(t, harnessDir, 2, "Brand new sprint")
+
+	data := loadDashboardData(harnessDir)
+
+	if len(data.Runs) != 2 {
+		t.Fatalf("expected both sprints in the runs list, got %d", len(data.Runs))
+	}
+	if data.Current.Number != 2 {
+		t.Fatalf("expected freshly created sprint 002 to be the current run, got number=%d run=%q",
+			data.Current.Number, data.Current.RunID)
+	}
+
+	m := newModel(harnessDir, true, "dev")
+	m.width = 132
+	m.height = 34
+	view := stripANSI(m.View())
+	if !strings.Contains(view, "Sprint 002") || !strings.Contains(view, "Brand new sprint") {
+		t.Fatalf("overview should render the newly created sprint 002\n%s", view)
+	}
+}
+
+func writeLegacyContract(t *testing.T, harnessDir string, number int, title string) {
+	t.Helper()
+	path := filepath.Join(harnessDir, "contracts", fmt.Sprintf("sprint-%03d.md", number))
+	body := fmt.Sprintf(`# Sprint %03d — %s
+
+## Goal
+Legacy contract fixture for sprint %d.
+
+## Deliverables
+- `+"`src/index.ts`"+`
+
+## Acceptance Criteria
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | works     | 8/10      |
+`, number, title, number)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeHarnessFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
