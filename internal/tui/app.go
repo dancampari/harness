@@ -22,10 +22,26 @@ func Run(harnessDir string, resume bool, version string) error {
 
 type tickMsg time.Time
 
-type commandDoneMsg struct {
+// commandStartedMsg is emitted once a streamed command's process has
+// been spawned. It carries the live stream handle, or a start error
+// when the process could not be launched.
+type commandStartedMsg struct {
 	input  string
-	output string
+	stream *commandStream
 	err    string
+}
+
+// commandLineMsg carries one line of streamed command output. The
+// stream pointer lets the model ignore lines from a superseded run.
+type commandLineMsg struct {
+	stream *commandStream
+	line   string
+}
+
+// commandExitMsg is emitted once the streamed command's process exits.
+type commandExitMsg struct {
+	input string
+	err   string
 }
 
 type openDoneMsg struct {

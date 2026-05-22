@@ -21,6 +21,11 @@ func (m *model) View() string {
 		m.renderNav(width),
 		"",
 	}
+	// The live command panel is injected above the active view so the
+	// realtime feedback is visible no matter which tab the user is on.
+	if m.commandBusy {
+		parts = append(parts, m.renderLiveCommand(width), "")
+	}
 	switch m.activeView {
 	case viewRuns:
 		parts = append(parts, m.renderRunsView(width))
@@ -58,10 +63,19 @@ func (m *model) renderHeader(width int) string {
 	agent := defaultString(m.data.Project.Agent, "manual")
 	status := defaultString(m.data.Project.Status, "idle")
 
+	// While a command runs, the header status cell becomes a live
+	// working indicator so the user always sees the harness is busy,
+	// regardless of which view is active.
+	statusCell := statusBadge(status)
+	if m.commandBusy {
+		statusCell = styles.Warning.Render(spinner(m.frame)+" working") +
+			styles.Muted.Render(" "+compactDuration(time.Since(m.commandStarted)))
+	}
+
 	left := styles.Brand.Render("harness") + "  " + styles.Muted.Render(m.version)
 	right := styles.Muted.Render("project: ") + styles.Text.Render(project) +
 		styles.Muted.Render("   agent: ") + styles.Text.Render(agent) +
-		styles.Muted.Render("   status: ") + statusBadge(status)
+		styles.Muted.Render("   status: ") + statusCell
 
 	leftW := lipgloss.Width(left)
 	rightW := lipgloss.Width(right)
@@ -69,7 +83,7 @@ func (m *model) renderHeader(width int) string {
 	if gap < 2 {
 		// Truncate the right block from the project end so the status badge stays visible.
 		short := styles.Muted.Render("agent: ") + styles.Text.Render(agent) +
-			styles.Muted.Render("   status: ") + statusBadge(status)
+			styles.Muted.Render("   status: ") + statusCell
 		shortW := lipgloss.Width(short)
 		gap = width - leftW - shortW
 		if gap < 2 {
@@ -78,6 +92,43 @@ func (m *model) renderHeader(width int) string {
 		return left + strings.Repeat(" ", gap) + short
 	}
 	return left + strings.Repeat(" ", gap) + right
+}
+
+// renderLiveCommand is the realtime feedback panel shown under the nav
+// bar whenever a command is running. It streams the command's combined
+// stdout/stderr line by line, with a spinner and elapsed-time counter,
+// so the user can see exactly what the harness is doing instead of
+// waiting for a silent process to finish.
+func (m *model) renderLiveCommand(width int) string {
+	header := section("Live · "+m.commandRun, width)
+	elapsed := compactDuration(time.Since(m.commandStarted))
+	statusLine := styles.Warning.Render(spinner(m.frame)) + " " +
+		styles.Text.Render("working") + "   " +
+		styles.Muted.Render("elapsed "+elapsed)
+
+	lines := []string{header, statusLine}
+	if len(m.commandLines) == 0 {
+		lines = append(lines, styles.Faint.Render("  waiting for output"+symbols().Ell))
+		return strings.Join(lines, "\n")
+	}
+	limit := 8
+	switch modeFor(m.width, m.height) {
+	case modeWide:
+		limit = 12
+	case modeMedium:
+		limit = 10
+	}
+	start := maxInt(0, len(m.commandLines)-limit)
+	shown := len(m.commandLines) - start
+	for _, raw := range m.commandLines[start:] {
+		clean := stripANSI(raw)
+		lines = append(lines, styles.Faint.Render("  "+truncate(clean, maxInt(8, width-2))))
+	}
+	if start > 0 {
+		lines = append(lines, styles.Muted.Render(
+			fmt.Sprintf("  showing last %d of %d lines", shown, len(m.commandLines))))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *model) renderNav(width int) string {

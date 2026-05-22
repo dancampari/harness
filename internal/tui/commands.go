@@ -1,47 +1,116 @@
 package tui
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func runCommand(root, input string) tea.Cmd {
+// commandStream is the live channel for one running command. The TUI
+// drains it one message at a time via waitForStreamMsg; the producer
+// goroutines push commandLineMsg per output line and a final
+// commandExitMsg, then close the channel.
+type commandStream struct {
+	ch chan tea.Msg
+}
+
+// startCommandCmd returns a tea.Cmd that spawns the command and begins
+// streaming its combined output. Process creation is deferred into the
+// returned closure so callers that never run the Bubble Tea loop (unit
+// tests inspecting executeCommand) do not spawn a subprocess.
+func startCommandCmd(root, input string) tea.Cmd {
 	return func() tea.Msg {
-		output, err := runCommandOutput(root, input)
-		done := commandDoneMsg{input: input, output: output}
+		stream, err := spawnCommandStream(root, input)
 		if err != nil {
-			done.err = err.Error()
+			return commandStartedMsg{input: input, err: err.Error()}
 		}
-		return done
+		return commandStartedMsg{input: input, stream: stream}
 	}
 }
 
-func runCommandOutput(root, input string) (string, error) {
+// spawnCommandStream starts the process and wires its stdout+stderr into
+// a single ordered channel. stdout and stderr are scanned concurrently;
+// cmd.Wait is called only after both pipes drain, per os/exec docs.
+func spawnCommandStream(root, input string) (*commandStream, error) {
 	projectRoot := projectRootForHarness(root)
+	var cmd *exec.Cmd
 	if strings.HasPrefix(input, "!") {
-		cmd := shellCommand(strings.TrimSpace(strings.TrimPrefix(input, "!")))
-		cmd.Dir = projectRoot
-		out, err := cmd.CombinedOutput()
-		return string(out), err
+		cmd = shellCommand(strings.TrimSpace(strings.TrimPrefix(input, "!")))
+	} else {
+		args, err := harnessCommandArgs(input)
+		if err != nil {
+			return nil, err
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		cmd = exec.Command(exe, args...)
 	}
-	args, err := harnessCommandArgs(input)
-	if err != nil {
-		return "", err
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	cmd := exec.Command(exe, args...)
 	cmd.Dir = projectRoot
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	stream := &commandStream{ch: make(chan tea.Msg, 256)}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	scan := func(r io.Reader) {
+		defer wg.Done()
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 64*1024), 1<<20)
+		for sc.Scan() {
+			line := strings.TrimRight(sc.Text(), "\r")
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			stream.ch <- commandLineMsg{stream: stream, line: line}
+		}
+	}
+	go scan(stdout)
+	go scan(stderr)
+	go func() {
+		wg.Wait() // both pipes fully drained before reaping the process
+		exit := commandExitMsg{input: input}
+		if err := cmd.Wait(); err != nil {
+			exit.err = err.Error()
+		}
+		stream.ch <- exit
+		close(stream.ch)
+	}()
+	return stream, nil
+}
+
+// waitForStreamMsg reads the next message from a live command stream.
+// A closed channel yields nil, which Bubble Tea treats as a no-op.
+func waitForStreamMsg(stream *commandStream) tea.Cmd {
+	if stream == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg, ok := <-stream.ch
+		if !ok {
+			return nil
+		}
+		return msg
+	}
 }
 
 func harnessCommandArgs(input string) ([]string, error) {
@@ -159,17 +228,17 @@ func (m *model) addCommandLog(line string) {
 	}
 }
 
-func firstNonEmptyLines(output string, limit int) []string {
-	var lines []string
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
+// lastNonEmptyLines returns up to limit trailing non-empty lines from
+// the streamed output, used to summarise a finished command in the
+// rolling command log.
+func lastNonEmptyLines(lines []string, limit int) []string {
+	var out []string
+	for i := len(lines) - 1; i >= 0 && len(out) < limit; i-- {
+		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
-		lines = append(lines, line)
-		if len(lines) >= limit {
-			return lines
-		}
+		out = append([]string{line}, out...)
 	}
-	return lines
+	return out
 }

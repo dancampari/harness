@@ -46,6 +46,26 @@ type model struct {
 	commandLog   []string
 	notices      []ActivityEvent
 	logsFollow   bool
+
+	// Live command streaming. While commandBusy, commandStream is the
+	// channel handle, commandLines holds the rolling streamed output,
+	// and commandStarted anchors the elapsed-time indicator.
+	commandStream  *commandStream
+	commandLines   []string
+	commandStarted time.Time
+}
+
+// maxLiveLines caps the in-memory streamed output buffer. Older lines
+// scroll off; the persistent record stays in .harness events/commands.
+const maxLiveLines = 400
+
+// appendCommandLine adds one streamed output line to the live buffer,
+// trimming the oldest lines once the cap is exceeded.
+func (m *model) appendCommandLine(line string) {
+	m.commandLines = append(m.commandLines, line)
+	if len(m.commandLines) > maxLiveLines {
+		m.commandLines = m.commandLines[len(m.commandLines)-maxLiveLines:]
+	}
 }
 
 func newModel(root string, resume bool, version string) *model {

@@ -341,6 +341,84 @@ Legacy contract fixture for sprint %d.
 	}
 }
 
+func TestLiveCommandPanelStreamsOutput(t *testing.T) {
+	harnessDir := writeHarnessFixture(t)
+	m := newModel(harnessDir, true, "dev")
+	m.width = 120
+	m.height = 32
+
+	stream := &commandStream{ch: make(chan tea.Msg, 8)}
+	m.commandBusy = true
+	m.commandRun = "sprint qa"
+	m.commandStarted = time.Now()
+	m.commandStream = stream
+
+	// A streamed line lands in the live buffer.
+	updated, _ := m.Update(commandLineMsg{stream: stream, line: "running eslint"})
+	m = updated.(*model)
+	if len(m.commandLines) != 1 || m.commandLines[0] != "running eslint" {
+		t.Fatalf("expected streamed line buffered, got %v", m.commandLines)
+	}
+
+	// A line from a superseded stream is ignored.
+	updated, _ = m.Update(commandLineMsg{stream: &commandStream{}, line: "stale"})
+	m = updated.(*model)
+	if len(m.commandLines) != 1 {
+		t.Fatalf("expected stale-stream line ignored, got %v", m.commandLines)
+	}
+
+	// The live panel and header spinner render while busy.
+	view := stripANSI(m.View())
+	for _, want := range []string{"Live · sprint qa", "working", "running eslint", "elapsed"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected live panel to show %q\n%s", want, view)
+		}
+	}
+
+	// The exit message clears the busy state and the stream handle.
+	updated, _ = m.Update(commandExitMsg{input: "sprint qa"})
+	m = updated.(*model)
+	if m.commandBusy {
+		t.Fatal("expected commandBusy=false after commandExitMsg")
+	}
+	if m.commandStream != nil {
+		t.Fatal("expected commandStream cleared after exit")
+	}
+	if !strings.Contains(strings.Join(m.commandLog, "\n"), "command done: sprint qa") {
+		t.Fatalf("expected completion logged, got %v", m.commandLog)
+	}
+}
+
+func TestStartCommandStreamEmitsLinesAndExit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// `!shell` commands run through the OS shell; echo is portable
+	// enough across the platforms the test suite targets.
+	stream, err := spawnCommandStream(filepath.Join(root, ".harness"), "!echo harness-stream-probe")
+	if err != nil {
+		t.Fatalf("spawn stream: %v", err)
+	}
+	var lines []string
+	sawExit := false
+	for msg := range stream.ch {
+		switch v := msg.(type) {
+		case commandLineMsg:
+			lines = append(lines, v.line)
+		case commandExitMsg:
+			sawExit = true
+		}
+	}
+	if !sawExit {
+		t.Fatal("expected a commandExitMsg before the channel closed")
+	}
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "harness-stream-probe") {
+		t.Fatalf("expected streamed echo output, got %q", joined)
+	}
+}
+
 func writeHarnessFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

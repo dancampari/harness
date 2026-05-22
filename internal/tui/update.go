@@ -32,18 +32,35 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(tea.ClearScreen, tick())
 		}
 		return m, tick()
-	case commandDoneMsg:
-		m.commandBusy = false
+	case commandStartedMsg:
 		if msg.err != "" {
-			m.addCommandLog("command failed: " + msg.input)
-			for _, line := range firstNonEmptyLines(msg.output+"\n"+msg.err, 3) {
-				m.addCommandLog(line)
-			}
+			m.commandBusy = false
+			m.commandStream = nil
+			m.addCommandLog("command failed to start: " + msg.input)
+			m.addCommandLog(msg.err)
+			m.addNotice("command.failed", msg.input)
+			return m, nil
+		}
+		m.commandStream = msg.stream
+		return m, waitForStreamMsg(msg.stream)
+	case commandLineMsg:
+		if msg.stream != m.commandStream {
+			return m, nil // line from a superseded run; ignore
+		}
+		m.appendCommandLine(msg.line)
+		return m, waitForStreamMsg(m.commandStream)
+	case commandExitMsg:
+		m.commandBusy = false
+		m.commandStream = nil
+		if msg.err != "" {
+			m.addCommandLog("command failed: " + msg.input + " (" + msg.err + ")")
+			m.addNotice("command.failed", msg.input)
 		} else {
 			m.addCommandLog("command done: " + msg.input)
-			for _, line := range firstNonEmptyLines(msg.output, 3) {
-				m.addCommandLog(line)
-			}
+			m.addNotice("command.done", msg.input)
+		}
+		for _, line := range lastNonEmptyLines(m.commandLines, 3) {
+			m.addCommandLog(line)
 		}
 		m.refresh()
 	case openDoneMsg:
@@ -167,9 +184,12 @@ func (m *model) executeCommand(input string) (tea.Model, tea.Cmd) {
 	}
 	m.commandBusy = true
 	m.commandRun = input
+	m.commandStarted = time.Now()
+	m.commandLines = nil
+	m.commandStream = nil
 	m.addCommandLog("command running: " + input)
 	m.addNotice("command.running", input)
-	return m, runCommand(m.root, input)
+	return m, startCommandCmd(m.root, input)
 }
 
 func (m *model) nextView() {
