@@ -7,6 +7,7 @@ import (
 
 func newRunCmd(version string) *cobra.Command {
 	var resume bool
+	var noAltScreen bool
 	cmd := &cobra.Command{
 		Use:   "run",
 		Short: "Launch the live TUI pipeline dashboard",
@@ -20,27 +21,30 @@ func newRunCmd(version string) *cobra.Command {
 
 Use --resume to load existing state from .harness/.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTUI(resume, version)
+			return runTUI(resume, version, !noAltScreen)
 		},
 	}
 	cmd.Flags().BoolVar(&resume, "resume", false, "resume from existing state")
+	cmd.Flags().BoolVar(&noAltScreen, "no-alt-screen", false, "render inline instead of using the terminal alternate screen")
 	return cmd
 }
 
-func runTUI(resume bool, version string) error {
-	return tui.Run(".harness", resume, version)
+func runTUI(resume bool, version string, altScreen bool) error {
+	return tui.RunWithOptions(".harness", resume, version, tui.Options{AltScreen: altScreen})
 }
 
 func newUICmd(version string) *cobra.Command {
 	var resume bool
+	var noAltScreen bool
 	cmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Launch the Harness terminal UI",
 		Long:  "Opens the Harness terminal UI. This is an alias for the live pipeline dashboard.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTUI(resume, version)
+			return runTUI(resume, version, !noAltScreen)
 		},
 	}
 	cmd.Flags().BoolVar(&resume, "resume", true, "resume from existing state")
+	cmd.Flags().BoolVar(&noAltScreen, "no-alt-screen", false, "render inline instead of using the terminal alternate screen")
 	return cmd
 }

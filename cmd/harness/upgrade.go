@@ -143,7 +143,7 @@ func runUpgrade(opts upgradeOptions, version string) error {
 	fmt.Printf("  Run Harness:     %s run --resume\n", harnessInvocation())
 
 	if opts.StartTUI {
-		return runTUI(true, version)
+		return runTUI(true, version, true)
 	}
 	return nil
 }

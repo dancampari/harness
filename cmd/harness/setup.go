@@ -140,7 +140,7 @@ func runSetup(opts setupOptions, version string) error {
 	fmt.Println("Codex, Claude Code, and Cursor interact with Harness by running these CLI commands from the installed references/hooks.")
 
 	if opts.StartTUI {
-		return runTUI(true, version)
+		return runTUI(true, version, true)
 	}
 	return nil
 }

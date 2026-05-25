@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project follows [Semantic Versioning](https://semver.org/) once
 production-ready.
 
+## [0.10.1] - 2026-05-25
+
+TUI launch compatibility patch.
+
+### Added
+
+- `harness run` and `harness ui` now support `--no-alt-screen` for terminals
+  that do not render Bubble Tea's full-screen alternate screen correctly.
+
+### Fixed
+
+- `harness run` now fails fast with an explicit interactive-terminal message
+  when invoked from a non-TTY output panel or captured process, instead of
+  appearing to open no interface.
+
 ## [0.10.0] - 2026-05-25
 
 TLC unification and hardening release.

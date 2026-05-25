@@ -2,9 +2,12 @@
 package tui
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/term"
 )
 
 const (
@@ -12,10 +15,27 @@ const (
 	refreshInterval   = 750 * time.Millisecond
 )
 
+type Options struct {
+	AltScreen bool
+}
+
 // Run launches the TUI. If resume is true, state is loaded from .harness/.
 func Run(harnessDir string, resume bool, version string) error {
+	return RunWithOptions(harnessDir, resume, version, Options{AltScreen: true})
+}
+
+// RunWithOptions launches the TUI with explicit terminal rendering options.
+func RunWithOptions(harnessDir string, resume bool, version string, opts Options) error {
+	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return fmt.Errorf("harness run requires an interactive terminal (TTY); open PowerShell, Windows Terminal, or the VS Code terminal and run `harness run --resume`")
+	}
+
 	m := newModel(harnessDir, resume, version)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	programOptions := []tea.ProgramOption{}
+	if opts.AltScreen {
+		programOptions = append(programOptions, tea.WithAltScreen())
+	}
+	p := tea.NewProgram(m, programOptions...)
 	_, err := p.Run()
 	return err
 }
