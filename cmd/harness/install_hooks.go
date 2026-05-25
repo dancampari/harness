@@ -41,7 +41,7 @@ By default Harness auto-detects existing CLI markers. Use --interactive for
 a guided install, or --cli codex|claude|cursor|all|none in scripts.
 
 Pass --pre-commit to also install a git pre-commit hook that runs the
-fast-feedback shift-left check (harness sprint qa --fast) on every commit.
+fast-feedback shift-left check (harness feature qa --fast) on every commit.
 The pre-push hook remains non-blocking; pre-commit blocks the commit when
 fast QA returns FAIL.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -66,7 +66,7 @@ fast QA returns FAIL.`,
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "ask which coding CLI to configure")
 	cmd.Flags().BoolVar(&git, "git", true, "also install the git pre-push safety hook")
 	cmd.Flags().BoolVar(&preCommit, "pre-commit", false,
-		"install a git pre-commit hook that runs harness sprint qa --fast and blocks on FAIL")
+		"install a git pre-commit hook that runs harness feature qa --fast and blocks on FAIL")
 	return cmd
 }
 
@@ -267,8 +267,8 @@ func installClaudeHooks(planningMode string) error {
 	appendClaudeHook(hooks, "PreToolUse", "Edit|MultiEdit|Write", invoke+" guard pre-tool")
 	appendClaudeHook(hooks, "PostToolUse", "Edit|MultiEdit|Write", invoke+" guard post-tool")
 	appendClaudeHook(hooks, "PostToolUse", "Bash", invoke+" guard post-tool")
-	appendClaudeHook(hooks, "Stop", "*", invoke+" sprint qa --format=json")
-	appendClaudeHook(hooks, "PostToolUse", "Bash(git commit*)", invoke+" sprint qa --format=tty")
+	appendClaudeHook(hooks, "Stop", "*", invoke+" feature qa --format=json")
+	appendClaudeHook(hooks, "PostToolUse", "Bash(git commit*)", invoke+" feature qa --format=tty")
 
 	content, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -514,7 +514,7 @@ cd "$repo_root" || exit 0
 if [ ! -f ".harness/config.yaml" ]; then
   exit 0
 fi
-%s sprint qa --format=tty || true
+%s feature qa --format=tty || true
 exit 0
 `, harnessInvocation())
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
@@ -549,7 +549,7 @@ cd "$repo_root" || exit 0
 if [ ! -f ".harness/config.yaml" ]; then
   exit 0
 fi
-%s sprint qa --fast --format=tty
+%s feature qa --fast --format=tty
 exit $?
 `, harnessInvocation())
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
@@ -594,15 +594,15 @@ for normal QA, status, or score checks.
 
 Harness function calls:
 
-- harness.status: ` + "`" + invoke + ` sprint status` + "`" + `
-- harness.start_sprint: ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+- harness.status: ` + "`" + invoke + ` feature status` + "`" + `
+- harness.start_sprint: ` + "`" + invoke + ` feature new "<goal>"` + "`" + `
 - harness.contract_status: ` + "`" + invoke + ` contract status` + "`" + `
 - harness.contract_propose: ` + "`" + invoke + ` contract propose` + "`" + `
 - harness.contract_approve: ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + `
 - harness.contract_reject: ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + `
-- harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
-- harness.repair: ` + "`" + invoke + ` sprint repair` + "`" + `
-- harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
+- harness.qa: ` + "`" + invoke + ` feature qa --format=json` + "`" + `
+- harness.repair: ` + "`" + invoke + ` feature repair` + "`" + `
+- harness.score: ` + "`" + invoke + ` feature score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.doctor_fix: ` + "`" + invoke + ` doctor --fix` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
@@ -614,8 +614,8 @@ Autonomous protocol:
 1. Read .specs/project/STATE.md to recover context from previous sessions.
 2. Read .specs/project/PROJECT.md for the global product spec.
 3. Read .harness/agent-protocol.md for the current Harness function contract.
-4. Run ` + "`" + invoke + ` sprint status` + "`" + ` before starting implementation.
-5. If no active sprint contract exists, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+4. Run ` + "`" + invoke + ` feature status` + "`" + ` before starting implementation.
+5. If no active sprint contract exists, run ` + "`" + invoke + ` feature new "<goal>"` + "`" + `
    and fill in the contract at .specs/features/sprint-NNN/spec.md with:
    - Deliverables (files + symbols expected)
    - Acceptance Criteria (with thresholds 1-10)
@@ -630,23 +630,23 @@ Autonomous protocol:
 8. Implement the feature only after agreement. If status is DRAFT, PROPOSED,
    CHANGED, REJECTED, MISSING, STALE, or BLOCKED, product-file edits are
    forbidden.
-9. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+9. After meaningful code changes, run ` + "`" + invoke + ` feature qa --format=json` + "`" + `
    without waiting for the user.
 10. Read .harness/reports/latest.json. If the verdict is FAIL, run
-   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix the
+   ` + "`" + invoke + ` feature repair` + "`" + `, read .harness/repairs/latest.md, fix the
    listed findings, and rerun QA. Repeat until verdict is PASS.
 11. If Doctor reports safe Harness config drift or says to run doctor --fix,
    run ` + "`" + invoke + ` doctor --fix` + "`" + ` autonomously before asking the user.
    Only ask for user approval when installing or changing project dependencies.
-12. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS. Never declare a
+12. Run ` + "`" + invoke + ` feature score` + "`" + ` only after QA is PASS. Never declare a
    sprint complete with FAIL.
 
 Only ask the user for product decisions, acceptance-criteria changes, dependency
 installation approval when it changes the project stack, or visual baseline
-approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `, or approved-fixture
-baseline approval via ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + `.
+approval via ` + "`" + invoke + ` feature qa --accept-screenshots` + "`" + `, or approved-fixture
+baseline approval via ` + "`" + invoke + ` feature qa --accept-fixtures` + "`" + `.
 
-Never run ` + "`" + invoke + ` sprint qa --allow-unagreed` + "`" + ` unless the user explicitly asks for an emergency override.
+Never run ` + "`" + invoke + ` feature qa --allow-unagreed` + "`" + ` unless the user explicitly asks for an emergency override.
 Never declare a task done without a passing, non-stale QA verdict from Harness.
 
 ` + tlcMultiAgentProtocol(invoke) + `
@@ -665,15 +665,15 @@ doctor checks.
 
 Harness function calls:
 
-- harness.status: ` + "`" + invoke + ` sprint status` + "`" + `
-- harness.start_sprint: ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+- harness.status: ` + "`" + invoke + ` feature status` + "`" + `
+- harness.start_sprint: ` + "`" + invoke + ` feature new "<goal>"` + "`" + `
 - harness.contract_status: ` + "`" + invoke + ` contract status` + "`" + `
 - harness.contract_propose: ` + "`" + invoke + ` contract propose` + "`" + `
 - harness.contract_approve: ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + `
 - harness.contract_reject: ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + `
-- harness.qa: ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
-- harness.repair: ` + "`" + invoke + ` sprint repair` + "`" + `
-- harness.score: ` + "`" + invoke + ` sprint score` + "`" + `
+- harness.qa: ` + "`" + invoke + ` feature qa --format=json` + "`" + `
+- harness.repair: ` + "`" + invoke + ` feature repair` + "`" + `
+- harness.score: ` + "`" + invoke + ` feature score` + "`" + `
 - harness.doctor: ` + "`" + invoke + ` doctor` + "`" + `
 - harness.doctor_fix: ` + "`" + invoke + ` doctor --fix` + "`" + `
 - harness.terminal: ` + "`" + invoke + ` run --resume` + "`" + `
@@ -684,23 +684,23 @@ Autonomous protocol for Claude Code:
 
 1. At session start, read .specs/project/STATE.md, .specs/project/PROJECT.md, and
    .harness/agent-protocol.md.
-2. Run ` + "`" + invoke + ` sprint status` + "`" + ` before implementation.
+2. Run ` + "`" + invoke + ` feature status` + "`" + ` before implementation.
 3. Create or update the sprint contract when needed.
 4. Run ` + "`" + invoke + ` contract propose` + "`" + ` after writing the contract. Do not
    implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED.
-5. After meaningful code changes, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + `
+5. After meaningful code changes, run ` + "`" + invoke + ` feature qa --format=json` + "`" + `
    without asking the user.
 6. Read .harness/reports/latest.json. If verdict is FAIL, run
-   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix
+   ` + "`" + invoke + ` feature repair` + "`" + `, read .harness/repairs/latest.md, fix
    findings, and rerun QA until PASS.
 7. If Doctor reports safe Harness config drift or says to run doctor --fix,
    run ` + "`" + invoke + ` doctor --fix` + "`" + ` autonomously before asking the user.
-8. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
+8. Run ` + "`" + invoke + ` feature score` + "`" + ` only after QA is PASS.
 
 Only ask the user for product decisions, acceptance criteria changes,
 dependency installation approval when it changes the project stack, or visual
-baseline approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `, or approved-fixture
-baseline approval via ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + `.
+baseline approval via ` + "`" + invoke + ` feature qa --accept-screenshots` + "`" + `, or approved-fixture
+baseline approval via ` + "`" + invoke + ` feature qa --accept-fixtures` + "`" + `.
 
 ` + tlcMultiAgentProtocol(invoke) + `
 ` + SkillIntegrationsBlock(".") + `
@@ -721,18 +721,18 @@ This project uses Harness Engineering. Always:
    call autonomously through CLI commands.
 ` + cursorPlanningAutomationProtocol(planningMode) + `
 4. Before implementing a feature, ensure a contract exists at
-   .specs/features/sprint-NNN/spec.md. If not, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+   .specs/features/sprint-NNN/spec.md. If not, run ` + "`" + invoke + ` feature new "<goal>"` + "`" + `
    and fill it in.
 5. Run ` + "`" + invoke + ` contract propose` + "`" + ` after writing the contract. Do not
    implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED.
-6. After implementing, run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` in the integrated terminal
+6. After implementing, run ` + "`" + invoke + ` feature qa --format=json` + "`" + ` in the integrated terminal
    without asking the user to run it.
 7. Process .harness/reports/latest.json. If verdict is FAIL, run
-   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix findings,
+   ` + "`" + invoke + ` feature repair` + "`" + `, read .harness/repairs/latest.md, fix findings,
    and rerun QA until PASS.
 8. If Doctor reports safe Harness config drift or says to run doctor --fix,
    run ` + "`" + invoke + ` doctor --fix` + "`" + ` autonomously before asking the user.
-9. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA is PASS.
+9. Run ` + "`" + invoke + ` feature score` + "`" + ` only after QA is PASS.
 
 Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajectory of the project.
 `
@@ -919,7 +919,7 @@ Rules:
 - Run harness contract propose after writing the contract.
 - Approve only the planner role when the contract is complete: harness contract approve --role planner.
 - If tester rejects the contract, repair the contract, propose the new hash, and approve planner again.
-- Never run harness sprint qa --allow-unagreed.
+- Never run harness feature qa --allow-unagreed.
 - Never implement before harness contract status returns AGREED.
 """
 `
@@ -981,10 +981,10 @@ Rules:
 - Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, the current contract, and .specs/features/sprint-NNN/tasks.md if present.
 - Implement only the current agreed sprint and preferably one atomic task at a time.
 - Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness_spec_planner.
-- After meaningful changes, run harness sprint qa --format=json.
+- After meaningful changes, run harness feature qa --format=json.
 - If Harness Doctor reports safe config drift, run harness doctor --fix before asking the user.
-- If QA fails, run harness sprint repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
-- Run harness sprint score only after QA is PASS.
+- If QA fails, run harness feature repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
+- Run harness feature score only after QA is PASS.
 """
 `
 
@@ -1035,7 +1035,7 @@ Rules:
 - Run harness contract propose after writing the contract.
 - Approve only the planner role when the contract is complete: harness contract approve --role planner.
 - If tester rejects the contract, repair the contract, propose the new hash, and approve planner again.
-- Never run harness sprint qa --allow-unagreed.
+- Never run harness feature qa --allow-unagreed.
 - Never implement before harness contract status returns AGREED.
 `
 
@@ -1098,10 +1098,10 @@ Rules:
 - Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, the current contract, and .specs/features/sprint-NNN/tasks.md if present.
 - Implement only the current agreed sprint and preferably one atomic task at a time.
 - Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness-spec-planner.
-- After meaningful changes, run harness sprint qa --format=json.
+- After meaningful changes, run harness feature qa --format=json.
 - If Harness Doctor reports safe config drift, run harness doctor --fix before asking the user.
-- If QA fails, run harness sprint repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
-- Run harness sprint score only after QA is PASS.
+- If QA fails, run harness feature repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
+- Run harness feature score only after QA is PASS.
 `
 
 // claudeResearcherAgent implements TLC's "Research / brownfield mapping"

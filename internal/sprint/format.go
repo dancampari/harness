@@ -33,7 +33,7 @@ func (q *QAResult) WriteTTY(w io.Writer) error {
 	passStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 
-	fmt.Fprintln(w, headerStyle.Render(fmt.Sprintf("┌─ harness sprint qa · sprint %03d ──────────────────────────────", q.sprintNumber)))
+	fmt.Fprintln(w, headerStyle.Render(fmt.Sprintf("┌─ harness feature qa · sprint %03d ──────────────────────────────", q.sprintNumber)))
 	fmt.Fprintln(w, "│")
 	fmt.Fprintf(w, "│  Verdict: %s    Total Score: %d/100\n", verdictStyle.Render(r.Verdict), r.TotalScore)
 	fmt.Fprintln(w, "│")

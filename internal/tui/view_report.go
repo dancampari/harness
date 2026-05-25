@@ -15,7 +15,7 @@ func (m *model) renderReportView(width int) string {
 	header := section(headerLabel, width)
 
 	if strings.TrimSpace(m.data.ReportMarkdown) == "" && len(run.Quality) == 0 {
-		return header + "\n" + emptyState("No report available.", "harness sprint qa")
+		return header + "\n" + emptyState("No report available.", "harness feature qa")
 	}
 
 	labelW := 12

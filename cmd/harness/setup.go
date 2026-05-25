@@ -136,10 +136,10 @@ func runSetup(opts setupOptions, version string) error {
 	fmt.Printf("  Install scope:              %s\n", choices.Scope)
 	fmt.Printf("  Project command:            %s\n", harnessInvocation())
 	fmt.Printf("  Open the Harness terminal: %s run --resume\n", invoke)
-	fmt.Printf("  Start a sprint:             %s sprint new \"first goal\"\n", invoke)
+	fmt.Printf("  Start a sprint:             %s feature new \"first goal\"\n", invoke)
 	fmt.Printf("  Agree contract:             %s contract propose && %s contract approve --role planner && %s contract approve --role tester\n", invoke, invoke, invoke)
-	fmt.Printf("  Run QA after agreement:     %s sprint qa\n", invoke)
-	fmt.Printf("  Repair failed QA:           %s sprint repair\n", invoke)
+	fmt.Printf("  Run QA after agreement:     %s feature qa\n", invoke)
+	fmt.Printf("  Repair failed QA:           %s feature repair\n", invoke)
 	fmt.Println()
 	fmt.Println("Codex, Claude Code, and Cursor interact with Harness by running these CLI commands from the installed references/hooks.")
 

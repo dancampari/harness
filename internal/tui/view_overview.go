@@ -25,7 +25,7 @@ func (m *model) renderCurrentRun(width int) string {
 	if run.RunID == "" && run.Feature == "" {
 		return header + "\n" + emptyState(
 			"No active run found.",
-			`harness sprint new "first goal"`)
+			`harness feature new "first goal"`)
 	}
 	labelW := 12
 	titleAvail := width - labelW - 2
@@ -104,7 +104,7 @@ func (m *model) renderQualityGate(width int) string {
 	if len(run.Quality) == 0 {
 		return header + "\n" + emptyState(
 			"No quality report available.",
-			"harness sprint qa")
+			"harness feature qa")
 	}
 	lines := []string{header}
 	for _, q := range run.Quality {

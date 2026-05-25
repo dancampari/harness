@@ -66,7 +66,7 @@ func TestInstallGitHookSkipsReposWithoutHarnessConfig(t *testing.T) {
 	expectFileContains(t,
 		filepath.Join(".git", "hooks", "pre-push"),
 		`if [ ! -f ".harness/config.yaml" ]; then`,
-		"sprint qa --format=tty || true",
+		"feature qa --format=tty || true",
 	)
 }
 

@@ -8,7 +8,7 @@ import (
 func (m *model) renderRunsView(width int) string {
 	header := section("Runs history", width)
 	if len(m.data.Runs) == 0 {
-		return header + "\n" + emptyState("No run history found.", `harness sprint new "feature"`)
+		return header + "\n" + emptyState("No run history found.", `harness feature new "feature"`)
 	}
 	showBranch := width >= 110
 	limit := maxInt(4, m.availableBodyHeight()-5)

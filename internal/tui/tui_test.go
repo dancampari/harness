@@ -51,7 +51,7 @@ func TestViewWorksWithoutCurrentRun(t *testing.T) {
 	m.height = 30
 	view := m.View()
 
-	for _, expected := range []string{"Current run", "No active run found", "harness sprint new"} {
+	for _, expected := range []string{"Current run", "No active run found", "harness feature new"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("expected empty overview to contain %q\n%s", expected, view)
 		}
@@ -349,7 +349,7 @@ func TestLiveCommandPanelStreamsOutput(t *testing.T) {
 
 	stream := &commandStream{ch: make(chan tea.Msg, 8)}
 	m.commandBusy = true
-	m.commandRun = "sprint qa"
+	m.commandRun = "feature qa"
 	m.commandStarted = time.Now()
 	m.commandStream = stream
 
@@ -369,14 +369,14 @@ func TestLiveCommandPanelStreamsOutput(t *testing.T) {
 
 	// The live panel and header spinner render while busy.
 	view := stripANSI(m.View())
-	for _, want := range []string{"Live · sprint qa", "working", "running eslint", "elapsed"} {
+	for _, want := range []string{"Live · feature qa", "working", "running eslint", "elapsed"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected live panel to show %q\n%s", want, view)
 		}
 	}
 
 	// The exit message clears the busy state and the stream handle.
-	updated, _ = m.Update(commandExitMsg{input: "sprint qa"})
+	updated, _ = m.Update(commandExitMsg{input: "feature qa"})
 	m = updated.(*model)
 	if m.commandBusy {
 		t.Fatal("expected commandBusy=false after commandExitMsg")
@@ -384,7 +384,7 @@ func TestLiveCommandPanelStreamsOutput(t *testing.T) {
 	if m.commandStream != nil {
 		t.Fatal("expected commandStream cleared after exit")
 	}
-	if !strings.Contains(strings.Join(m.commandLog, "\n"), "command done: sprint qa") {
+	if !strings.Contains(strings.Join(m.commandLog, "\n"), "command done: feature qa") {
 		t.Fatalf("expected completion logged, got %v", m.commandLog)
 	}
 }

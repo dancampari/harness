@@ -107,7 +107,7 @@ type Status struct {
 	Score    string // - | NN/100
 }
 
-// Status returns the current sprint status.
+// Status returns the current feature status.
 func (m *Manager) Status() (Status, error) {
 	n, err := m.currentSprintNumber()
 	if err != nil {
@@ -163,7 +163,7 @@ func (m *Manager) Status() (Status, error) {
 // ISOLATED SUBPROCESS to honor problem 5 of the video: the process that
 // wrote the code must not be the one that judges it.
 //
-// The subprocess runs `harness sprint qa --internal`. It:
+// The subprocess runs `harness feature qa --internal`. It:
 //   - inherits no in-memory state from the parent or from the Builder
 //   - runs with a deliberately filtered environment (no env vars that
 //     could carry contextual state from the coding CLI)
@@ -211,7 +211,7 @@ func (m *Manager) RunQAWith(opts QAOptions) (*QAResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	args := []string{"sprint", "qa", "--internal"}
+	args := []string{"feature", "qa", "--internal"}
 	if opts.Fast {
 		args = append(args, "--fast")
 	}
@@ -472,7 +472,7 @@ func (m *Manager) Consolidate(allowFail bool) (*ConsolidatedReport, error) {
 		return nil, err
 	}
 	if !ag.ReportIsCurrent(ev.Timestamp) {
-		return nil, fmt.Errorf("contract agreement required before scoring: sprint %03d report is stale or unagreed; run contract propose/approve, then rerun harness sprint qa",
+		return nil, fmt.Errorf("contract agreement required before scoring: sprint %03d report is stale or unagreed; run contract propose/approve, then rerun harness feature qa",
 			n)
 	}
 	if ev.Process.WorkspaceSHA != "" {
@@ -480,7 +480,7 @@ func (m *Manager) Consolidate(allowFail bool) (*ConsolidatedReport, error) {
 		if repoErr == nil {
 			currentSHA, hashErr := workspace.Hash(repoRoot)
 			if hashErr == nil && currentSHA != ev.Process.WorkspaceSHA {
-				return nil, fmt.Errorf("workspace changed after QA for sprint %03d: rerun harness sprint qa before consolidating; report SHA=%s current SHA=%s",
+				return nil, fmt.Errorf("workspace changed after QA for sprint %03d: rerun harness feature qa before consolidating; report SHA=%s current SHA=%s",
 					n, shortSHA(ev.Process.WorkspaceSHA), shortSHA(currentSHA))
 			}
 		}
@@ -489,7 +489,7 @@ func (m *Manager) Consolidate(allowFail bool) (*ConsolidatedReport, error) {
 		if _, err := m.writeRepairBriefFromResult(n, &ev); err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("sprint %03d cannot be scored because QA verdict is %s; read .harness/repairs/latest.md, fix findings, rerun harness sprint qa, and score only after PASS",
+		return nil, fmt.Errorf("sprint %03d cannot be scored because QA verdict is %s; read .harness/repairs/latest.md, fix findings, rerun harness feature qa, and score only after PASS",
 			n, ev.Verdict)
 	}
 
@@ -788,15 +788,15 @@ func (m *Manager) renderRepairBrief(n int, r *evaluator.EvaluationResult) string
 	fmt.Fprintf(&sb, "- Evaluation: `.harness/evaluations/sprint-%03d.md`\n\n", n)
 
 	if r.Verdict == "PASS" {
-		fmt.Fprintf(&sb, "No repair required. Run `harness sprint score` to consolidate the sprint.\n")
+		fmt.Fprintf(&sb, "No repair required. Run `harness feature score` to consolidate the sprint.\n")
 		return sb.String()
 	}
 
 	fmt.Fprintf(&sb, "## Required Agent Loop\n")
 	fmt.Fprintf(&sb, "1. Fix every actionable finding below without changing the agreed contract.\n")
-	fmt.Fprintf(&sb, "2. Run `harness sprint qa --format=json` after the fix.\n")
+	fmt.Fprintf(&sb, "2. Run `harness feature qa --format=json` after the fix.\n")
 	fmt.Fprintf(&sb, "3. If QA still returns FAIL, reread `.harness/repairs/latest.md` and repeat.\n")
-	fmt.Fprintf(&sb, "4. Run `harness sprint score` only after QA returns PASS.\n")
+	fmt.Fprintf(&sb, "4. Run `harness feature score` only after QA returns PASS.\n")
 	fmt.Fprintf(&sb, "5. Do not declare the sprint complete while this file contains unresolved findings.\n\n")
 
 	flat := flattenedFindings(r)
@@ -844,12 +844,12 @@ func (m *Manager) renderRepairBrief(n int, r *evaluator.EvaluationResult) string
 		if visualApprovalRequired(flat) {
 			fmt.Fprintf(&sb, "- A screenshot baseline is missing or visual output changed. The agent must not accept it silently.\n")
 			fmt.Fprintf(&sb, "- Ask the user to review `.harness/screenshots/current/` and, for regressions, `.harness/screenshots/diff/`.\n")
-			fmt.Fprintf(&sb, "- Only after explicit approval, run `harness sprint qa --accept-screenshots`.\n")
+			fmt.Fprintf(&sb, "- Only after explicit approval, run `harness feature qa --accept-screenshots`.\n")
 		}
 		if fixtureApprovalRequired(flat) {
 			fmt.Fprintf(&sb, "- An approved behavior fixture is missing or changed. The agent must not accept it silently.\n")
 			fmt.Fprintf(&sb, "- Ask the user to review `.harness/fixtures/` and the behavior change.\n")
-			fmt.Fprintf(&sb, "- Only after explicit approval, run `harness sprint qa --accept-fixtures`.\n")
+			fmt.Fprintf(&sb, "- Only after explicit approval, run `harness feature qa --accept-fixtures`.\n")
 		}
 		fmt.Fprintln(&sb)
 	}
@@ -953,7 +953,7 @@ func repairAction(f repairFinding) string {
 		if f.message != "" {
 			return f.message
 		}
-		return "Fix this finding and rerun harness sprint qa."
+		return "Fix this finding and rerun harness feature qa."
 	}
 }
 
@@ -1028,7 +1028,7 @@ type QAResult struct {
 	reportPath     string
 }
 
-// ConsolidatedReport is what `harness sprint score` returns.
+// ConsolidatedReport is what `harness feature score` returns.
 type ConsolidatedReport struct {
 	SprintNumber   int
 	Score          evScore
@@ -1048,7 +1048,7 @@ type RepairBrief struct {
 	LatestPath   string
 }
 
-// SprintListItem is one row in `harness sprint list`.
+// SprintListItem is one row in `harness feature list`.
 type SprintListItem struct {
 	Number  int
 	Goal    string

@@ -22,7 +22,7 @@ artifacts instead of creating a second `.specs/` source of truth:
 - Specify -> `.harness/contracts/sprint-NNN.md`
 - Design -> `.harness/design/sprint-NNN.md` when architectural decisions exist
 - Tasks -> `.harness/tasks/sprint-NNN.md` when the sprint needs explicit atomic work items
-- Execute/Validate -> `harness sprint qa`, `harness sprint repair`, and `harness sprint score`
+- Execute/Validate -> `harness feature qa`, `harness feature repair`, and `harness feature score`
 
 Plan: `docs/SPEC_DRIVEN_SKILL_PACK.md`.
 
@@ -47,7 +47,7 @@ project-local pre-tool hook surface.
 
 ### Premature Victory
 
-`harness sprint qa` runs configured sensors in an isolated evaluator process.
+`harness feature qa` runs configured sensors in an isolated evaluator process.
 By default it first checks that the current sprint contract is `agreed`.
 Config v2 is strict: a dimension is active only when both threshold and weight
 are greater than zero, and every active dimension must have at least one real
@@ -57,7 +57,7 @@ score `0`, and force `FAIL`.
 When QA fails, the sprint is not complete. Harness writes
 `.harness/repairs/latest.md` with the failed dimensions, findings, and required
 next action. Agents must repair, rerun QA, and repeat until the verdict is
-`PASS`. `harness sprint score` refuses to consolidate `FAIL` unless the user
+`PASS`. `harness feature score` refuses to consolidate `FAIL` unless the user
 explicitly passes `--allow-fail` for an abandoned-sprint audit record.
 
 Code: `internal/evaluator/evaluator.go`, `internal/config/config.go`.
@@ -77,7 +77,7 @@ Code: `internal/memory/memory.go`, `internal/reporter/reporter.go`.
 The E2E dimension uses Playwright browser tests. Screenshot attachments are
 copied into `.harness/screenshots/current`, compared against
 `.harness/screenshots/baseline`, and visual differences become E2E findings.
-New baselines require `harness sprint qa --accept-screenshots` after review.
+New baselines require `harness feature qa --accept-screenshots` after review.
 
 Code: `internal/adapters/playwright.go`.
 
@@ -86,7 +86,7 @@ not need a browser. JSON fixtures under `.harness/fixtures/` run a configured
 command, compare exit code/stdout/stderr against approved expectations, and
 fail with `fixture-baseline-missing` or `fixture-regression` when the behavior
 has not been approved. Updating the approved output requires
-`harness sprint qa --accept-fixtures` after human review.
+`harness feature qa --accept-fixtures` after human review.
 
 Code: `internal/adapters/approved_fixtures.go`.
 

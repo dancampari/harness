@@ -332,7 +332,7 @@ func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doct
 		return
 	}
 
-	if fileContains(filepath.Join(harnessDir, "agent-protocol.md"), "harness.repair", "sprint repair") {
+	if fileContains(filepath.Join(harnessDir, "agent-protocol.md"), "harness.repair", "feature repair") {
 		fmt.Println("  OK   agent protocol includes repair loop")
 	} else {
 		fmt.Println("  FAIL .harness/agent-protocol.md is missing or stale")
@@ -401,13 +401,13 @@ func checkGitHooks(root string) {
 		return
 	}
 	prePush := filepath.Join(hooksDir, "pre-push")
-	if fileContains(prePush, "harness", "sprint qa") {
+	if fileContains(prePush, "harness", "feature qa") {
 		fmt.Println("  OK   git pre-push reports QA")
 	} else {
 		fmt.Println("  WARN git pre-push not installed; run harness install-hooks")
 	}
 	preCommit := filepath.Join(hooksDir, "pre-commit")
-	if fileContains(preCommit, "harness", "sprint qa --fast") {
+	if fileContains(preCommit, "harness", "feature qa --fast") {
 		fmt.Println("  OK   git pre-commit runs fast QA")
 	} else {
 		fmt.Println("  WARN git pre-commit not installed; run harness install-hooks --pre-commit to enable shift-left")
@@ -627,7 +627,7 @@ func expectedReferences(setupCLI string, detected []string) []string {
 func checkAgentReference(root, cli, planningMode string, audit *doctorAudit) {
 	switch cli {
 	case "codex":
-		if fileContains(filepath.Join(root, "AGENTS.md"), "## Harness Gate", "harness.repair", "sprint repair") {
+		if fileContains(filepath.Join(root, "AGENTS.md"), "## Harness Gate", "harness.repair", "feature repair") {
 			fmt.Println("  OK   Codex AGENTS.md includes repair protocol")
 		} else {
 			fmt.Println("  FAIL Codex AGENTS.md is missing or stale")
@@ -649,7 +649,7 @@ func checkAgentReference(root, cli, planningMode string, audit *doctorAudit) {
 			}
 		}
 	case "claude":
-		if fileContains(filepath.Join(root, "CLAUDE.md"), "## Harness Gate", "harness.repair", "sprint repair") {
+		if fileContains(filepath.Join(root, "CLAUDE.md"), "## Harness Gate", "harness.repair", "feature repair") {
 			fmt.Println("  OK   Claude CLAUDE.md includes repair protocol")
 		} else {
 			fmt.Println("  FAIL Claude CLAUDE.md is missing or stale")
@@ -671,7 +671,7 @@ func checkAgentReference(root, cli, planningMode string, audit *doctorAudit) {
 			}
 		}
 	case "cursor":
-		needles := []string{"Harness Engineering", "sprint repair"}
+		needles := []string{"Harness Engineering", "feature repair"}
 		if planningMode == PlanningSpecDriven {
 			needles = append(needles, "Spec-driven automation")
 		}

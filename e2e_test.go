@@ -25,14 +25,14 @@ func TestE2ESetupInstallsSpecDrivenAutomationForAllCLIs(t *testing.T) {
 		path    string
 		needles []string
 	}{
-		{".harness/agent-protocol.md", []string{"harness.doctor_fix", "doctor --fix", "sprint repair", "Spec-driven automation"}},
+		{".harness/agent-protocol.md", []string{"harness.doctor_fix", "doctor --fix", "feature repair", "Spec-driven automation"}},
 		{".harness/skills/tlc-spec-driven/SKILL.md", []string{"Specify", "Design", "Tasks", "Execute"}},
 		{".harness/skills/harness-gate/SKILL.md", []string{"Agreement gate", "QA dimensions", "Events log"}},
 		{"AGENTS.md", []string{"harness.doctor_fix", "harness_contract_reviewer", "harness_task_worker"}},
 		{filepath.Join(".codex", "agents", "harness-task-worker.toml"), []string{"harness_task_worker", "harness doctor --fix", "AGREED"}},
 		{"CLAUDE.md", []string{"harness.doctor_fix", "harness-contract-reviewer", "harness-task-worker"}},
 		{filepath.Join(".claude", "agents", "harness-task-worker.md"), []string{"harness-task-worker", "harness doctor --fix", "AGREED"}},
-		{filepath.Join(".cursor", "rules", "harness.mdc"), []string{"Harness Engineering", "doctor --fix", "sprint repair"}},
+		{filepath.Join(".cursor", "rules", "harness.mdc"), []string{"Harness Engineering", "doctor --fix", "feature repair"}},
 	} {
 		for _, needle := range check.needles {
 			assertFileContains(t, filepath.Join(root, check.path), needle)
@@ -298,7 +298,7 @@ func TestE2EPreCommitHookBlocksFastFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, needle := range []string{"sprint qa --fast", "--no-verify"} {
+	for _, needle := range []string{"feature qa --fast", "--no-verify"} {
 		if !strings.Contains(string(b), needle) {
 			t.Fatalf("expected pre-commit hook to mention %q, got:\n%s", needle, b)
 		}

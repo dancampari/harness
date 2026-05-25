@@ -426,7 +426,7 @@ func (m *Manager) TasksPath(sprintNumber int) string {
 }
 
 // CanonicalContractPath returns the .specs/ path regardless of whether
-// the artifact has been migrated yet. New contracts (`harness sprint new`)
+// the artifact has been migrated yet. New contracts (`harness feature new`)
 // write here; migration moves legacy files to this path.
 func (m *Manager) CanonicalContractPath(sprintNumber int) string {
 	return filepath.Join(m.featureDir(sprintNumber), "spec.md")

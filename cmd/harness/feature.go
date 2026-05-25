@@ -16,17 +16,16 @@ func newFeatureCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "feature",
 		Aliases: []string{"feat"},
-		Short:   "Manage features (TLC vocabulary; aliases harness sprint + harness contract)",
+		Short:   "Manage features (canonical TLC workflow)",
 		Long: `TLC's spec-driven workflow speaks of features, not sprints.
-` + "`harness feature`" + ` exposes that vocabulary while delegating to the same
-implementation as ` + "`harness sprint`" + ` / ` + "`harness contract`" + `:
+` + "`harness feature`" + ` is the canonical workflow surface:
 
-  harness feature new "<goal>"           # alias of harness sprint new
-  harness feature status                 # alias of harness sprint status
-  harness feature qa                     # alias of harness sprint qa
-  harness feature repair                 # alias of harness sprint repair
-  harness feature score                  # alias of harness sprint score
-  harness feature list                   # alias of harness sprint list
+  harness feature new "<goal>"           # create a feature spec
+  harness feature status                 # show pipeline state
+  harness feature qa                     # run QA
+  harness feature repair                 # print repair brief
+  harness feature score                  # consolidate after PASS
+  harness feature list                   # list completed features
   harness feature propose                # alias of harness contract propose
   harness feature approve --role <role>  # alias of harness contract approve
   harness feature reject  --role <role>  # alias of harness contract reject

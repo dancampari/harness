@@ -42,13 +42,13 @@ var llmHints = map[string]string{
 	// Coverage / behavior
 	"test-failure":             "Suggested fix: fix the failing test or the implementation under test. Do NOT delete the test or comment its assertion out.",
 	"coverage-below-threshold": "Suggested fix: add tests that exercise the uncovered branches reported by the coverage tool. Do NOT lower the coverage threshold.",
-	"fixture-baseline-missing": "Suggested fix: review the new fixture output with the user, then run `harness sprint qa --accept-fixtures` after approval. Do NOT accept silently.",
+	"fixture-baseline-missing": "Suggested fix: review the new fixture output with the user, then run `harness feature qa --accept-fixtures` after approval. Do NOT accept silently.",
 	"fixture-regression":       "Suggested fix: fix the regression in product code so the approved fixture passes again. Do NOT accept the new output without explicit user approval.",
 
 	// E2E
 	"e2e-failure":                 "Suggested fix: fix the failing flow or selector reported by Playwright. Do NOT mark the spec as `.skip()` without recording the reason in the contract and getting tester approval.",
 	"no-e2e-tests":                "Suggested fix: add Playwright coverage for the primary user flow described in the contract. Do NOT lower the E2E threshold to make QA pass without coverage.",
-	"screenshot-baseline-missing": "Suggested fix: ask the user to review `.harness/screenshots/current/`. Only after approval, rerun with `harness sprint qa --accept-screenshots`. Do NOT accept blindly.",
+	"screenshot-baseline-missing": "Suggested fix: ask the user to review `.harness/screenshots/current/`. Only after approval, rerun with `harness feature qa --accept-screenshots`. Do NOT accept blindly.",
 	"visual-regression":           "Suggested fix: inspect `.harness/screenshots/diff/` and fix the UI change, or ask the user to approve the new baseline. Do NOT update the baseline silently.",
 
 	// Contract / harness internals

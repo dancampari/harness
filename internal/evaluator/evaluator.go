@@ -92,7 +92,7 @@ type ProcessInfo struct {
 	AcceptingScreenshots bool `json:"accepting_screenshots"`
 	AcceptingFixtures    bool `json:"accepting_fixtures"`
 	// WorkspaceSHA is the deterministic content hash of the working tree
-	// computed by internal/workspace at QA time. harness sprint score
+	// computed by internal/workspace at QA time. harness feature score
 	// rejects consolidation when this no longer matches, so reports
 	// cannot be "claimed" against code edited after they were produced.
 	WorkspaceSHA string `json:"workspace_sha,omitempty"`

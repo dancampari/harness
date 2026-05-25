@@ -15,7 +15,7 @@ func newWatchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "watch",
 		Short: "Run a drift-watch pass outside the sprint lifecycle",
-		Long: `Runs a periodic drift monitor that complements harness sprint qa.
+		Long: `Runs a periodic drift monitor that complements harness feature qa.
 
 Watch is intentionally narrow:
   - it does not require a sprint contract;

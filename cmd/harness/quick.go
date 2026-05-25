@@ -24,7 +24,7 @@ import (
 //
 // It writes the TASK.md, emits a `quick.created` event, and prints the
 // next-step pointer. It does NOT spawn QA — the caller decides whether to
-// follow up with `harness sprint qa --fast --allow-unagreed`.
+// follow up with `harness feature qa --fast --allow-unagreed`.
 func newQuickCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "quick \"<one-line description>\"",
@@ -69,7 +69,7 @@ from the TASK.md + SUMMARY.md pair, not from the deterministic contract.`,
 			events.Record(".harness", "quick.created", events.PhaseContract,
 				fmt.Sprintf("quick %03d · %s", number, description), "")
 			fmt.Printf("✓ Quick task %03d created at %s\n", number, taskPath)
-			fmt.Println("  Implement the change, fill SUMMARY.md, and run `harness sprint qa --fast --allow-unagreed` if QA is appropriate.")
+			fmt.Println("  Implement the change, fill SUMMARY.md, and run `harness feature qa --fast --allow-unagreed` if QA is appropriate.")
 			return nil
 		},
 	}

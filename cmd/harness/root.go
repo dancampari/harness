@@ -72,14 +72,14 @@ Workflow:
   harness                         # one-command setup
   harness upgrade                 # refresh generated files, preserve memory/history
   harness --planning spec-driven  # setup with full spec-driven automation
-  harness sprint new "<goal>"     # creates .specs/features/sprint-NNN/spec.md
+  harness feature new "<goal>"     # creates .specs/features/sprint-NNN/spec.md
   harness contract propose        # proposes the contract hash for agreement
   harness contract approve --role planner
   harness contract approve --role tester
   # ... CLI implements only after the contract is AGREED ...
-  harness sprint qa               # runs Evaluator (isolated subprocess)
-  harness sprint repair           # prints the latest repair brief after FAIL
-  harness sprint score            # consolidates PASS + updates .specs/project/STATE.md
+  harness feature qa               # runs Evaluator (isolated subprocess)
+  harness feature repair           # prints the latest repair brief after FAIL
+  harness feature score            # consolidates PASS + updates .specs/project/STATE.md
   harness doctor --fix            # repairs safe config drift such as missing adapter defaults
   harness doctor --strict         # checks active dimensions, sensors, and generated agent references
   harness run --resume            # live TUI of the whole pipeline

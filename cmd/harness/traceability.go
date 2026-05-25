@@ -26,7 +26,7 @@ machine-readable output.
 
 The ledger is populated by ` + "`harness contract propose`" + ` (creates Pending
 entries from the spec's ` + "`## Requirements`" + ` section), advanced to
-Implementing on AGREED, and to Verified after ` + "`harness sprint score`" + ` /
+Implementing on AGREED, and to Verified after ` + "`harness feature score`" + ` /
 ` + "`harness feature score`" + ` succeeds.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ledger, err := traceability.Load(".harness")

@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project follows [Semantic Versioning](https://semver.org/) once
 production-ready.
 
+## [0.10.3] - 2026-05-25
+
+Canonical feature command reference patch.
+
+### Fixed
+
+- Generated Codex, Claude, Cursor, agent protocol, and git hook references now
+  use `harness feature ...` instead of the deprecated `harness sprint ...`
+  alias, preventing fresh installs/upgrades from filling the TUI activity feed
+  with `cli.deprecated` events.
+- Doctor freshness checks and E2E tests now validate the canonical `feature`
+  command text.
 ## [0.10.2] - 2026-05-25
 
 Windows global install hardening patch.

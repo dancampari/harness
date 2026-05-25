@@ -107,7 +107,7 @@ func TestUpgradeRefreshesGeneratedFilesAndPreservesMemory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(agents), "## Harness Gate") || !strings.Contains(string(agents), "sprint repair") {
+	if !strings.Contains(string(agents), "## Harness Gate") || !strings.Contains(string(agents), "feature repair") {
 		t.Fatalf("expected Codex reference to be refreshed, got:\n%s", agents)
 	}
 	if _, err := os.Stat(filepath.Join(".harness", "memory.db")); err != nil {

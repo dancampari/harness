@@ -18,7 +18,7 @@ Contract automation skills are enabled.
 
 - .harness/skills/contract-authoring/SKILL.md
 
-Run harness sprint score before declaring the work complete.
+Run harness feature score before declaring the work complete.
 `
 	path := filepath.Join(root, "agent-protocol.md")
 	if err := os.WriteFile(path, []byte(stale), 0o644); err != nil {
@@ -33,7 +33,7 @@ Run harness sprint score before declaring the work complete.
 		t.Fatal(err)
 	}
 	text := string(b)
-	for _, expected := range []string{"harness.repair", "sprint repair", ".harness/repairs/latest.md", "sprint score` only after QA", ".harness/skills/tlc-spec-driven/SKILL.md", ".harness/skills/harness-gate/SKILL.md"} {
+	for _, expected := range []string{"harness.repair", "feature repair", ".harness/repairs/latest.md", "feature score` only after QA", ".harness/skills/tlc-spec-driven/SKILL.md", ".harness/skills/harness-gate/SKILL.md"} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("expected refreshed protocol to contain %q\n%s", expected, text)
 		}

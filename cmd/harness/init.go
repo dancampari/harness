@@ -157,7 +157,7 @@ func runInit(opts initOptions) error {
 		fmt.Println("  Next steps:")
 		fmt.Println("    1. Edit .specs/project/PROJECT.md with your product spec")
 		fmt.Printf("    2. %s install-hooks --interactive    # choose Codex, Claude Code, or Cursor\n", invoke)
-		fmt.Printf("    3. %s sprint new \"first goal\"\n", invoke)
+		fmt.Printf("    3. %s feature new \"first goal\"\n", invoke)
 	}
 	return nil
 }
@@ -315,15 +315,15 @@ Harness functions:
 
 | Function | Required CLI call | When the agent calls it |
 |---|---|---|
-| harness.status | ` + "`" + invoke + ` sprint status` + "`" + ` | At session start and before final response |
-| harness.start_sprint | ` + "`" + invoke + ` sprint new "<goal>"` + "`" + ` | When no active sprint contract exists |
+| harness.status | ` + "`" + invoke + ` feature status` + "`" + ` | At session start and before final response |
+| harness.start_sprint | ` + "`" + invoke + ` feature new "<goal>"` + "`" + ` | When no active sprint contract exists |
 | harness.contract_status | ` + "`" + invoke + ` contract status` + "`" + ` | Before implementation and before QA |
 | harness.contract_propose | ` + "`" + invoke + ` contract propose` + "`" + ` | After writing or changing the sprint contract |
 | harness.contract_approve | ` + "`" + invoke + ` contract approve --role <planner|tester>` + "`" + ` | When a required agent role agrees with the exact contract hash |
 | harness.contract_reject | ` + "`" + invoke + ` contract reject --role <planner|tester> --reason "<why>"` + "`" + ` | When a required role cannot accept the contract |
-| harness.qa | ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` | After meaningful code changes and before completion |
-| harness.repair | ` + "`" + invoke + ` sprint repair` + "`" + ` | When QA returns FAIL |
-| harness.score | ` + "`" + invoke + ` sprint score` + "`" + ` | Only after QA verdict is PASS |
+| harness.qa | ` + "`" + invoke + ` feature qa --format=json` + "`" + ` | After meaningful code changes and before completion |
+| harness.repair | ` + "`" + invoke + ` feature repair` + "`" + ` | When QA returns FAIL |
+| harness.score | ` + "`" + invoke + ` feature score` + "`" + ` | Only after QA verdict is PASS |
 | harness.doctor | ` + "`" + invoke + ` doctor` + "`" + ` | When a required sensor/tool is missing |
 | harness.doctor_fix | ` + "`" + invoke + ` doctor --fix` + "`" + ` | When Doctor recommends safe Harness config repair |
 | harness.terminal | ` + "`" + invoke + ` run --resume` + "`" + ` | When the user wants the live terminal dashboard |
@@ -343,23 +343,23 @@ Autonomy rules:
    planner and tester roles must approve the same contract hash.
 6. If status is DRAFT, PROPOSED, CHANGED, REJECTED, MISSING, STALE, or
    BLOCKED, product-file edits are forbidden. Repair the contract first.
-7. Never run ` + "`" + invoke + ` sprint qa --allow-unagreed` + "`" + ` unless the user explicitly
+7. Never run ` + "`" + invoke + ` feature qa --allow-unagreed` + "`" + ` unless the user explicitly
    asks for an emergency override.
-8. Run ` + "`" + invoke + ` sprint qa --format=json` + "`" + ` without waiting for the user after
+8. Run ` + "`" + invoke + ` feature qa --format=json` + "`" + ` without waiting for the user after
    meaningful code changes.
 9. Read .harness/reports/latest.json after QA. If verdict is FAIL, run
-   ` + "`" + invoke + ` sprint repair` + "`" + `, read .harness/repairs/latest.md, fix the
+   ` + "`" + invoke + ` feature repair` + "`" + `, read .harness/repairs/latest.md, fix the
    listed findings, and rerun QA. Repeat until verdict is PASS.
 10. If Doctor reports safe Harness config drift or says to run doctor --fix,
    run ` + "`" + invoke + ` doctor --fix` + "`" + ` autonomously before asking the user.
    Only ask for user approval when installing or changing project dependencies.
-11. Run ` + "`" + invoke + ` sprint score` + "`" + ` only after QA returns PASS. A failing
+11. Run ` + "`" + invoke + ` feature score` + "`" + ` only after QA returns PASS. A failing
    sprint is not complete and must not be scored unless the user explicitly
    asks for an emergency failure record.
 12. Only ask the user for decisions Harness cannot make deterministically:
    product intent, changing acceptance criteria, installing missing project
    tools when that changes the app stack, or accepting visual baselines with
-   ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `, or approved behavior fixtures with
-   ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + `.
+   ` + "`" + invoke + ` feature qa --accept-screenshots` + "`" + `, or approved behavior fixtures with
+   ` + "`" + invoke + ` feature qa --accept-fixtures` + "`" + `.
 `
 }

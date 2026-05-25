@@ -16,8 +16,8 @@ script calling the Anthropic SDK, a bash wrapper around `ollama`, etc.
 ## Status
 
 Optional and disabled by default. Enabling it adds an extra QA latency
-cost (one LLM call per `harness sprint qa`, typically 30s–10min). The
-adapter is automatically excluded from `harness sprint qa --fast` and
+cost (one LLM call per `harness feature qa`, typically 30s–10min). The
+adapter is automatically excluded from `harness feature qa --fast` and
 `harness watch`, so pre-commit and the drift watch loop never pay the
 inferential cost.
 

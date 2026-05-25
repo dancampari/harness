@@ -29,7 +29,7 @@ is deterministic, conservative, and reproducible.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.10.2
+npx github:dancampari/harness#v0.10.3
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -68,12 +68,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.10.2 --yes
-npx github:dancampari/harness#v0.10.2 --cli codex --yes
-npx github:dancampari/harness#v0.10.2 --cli claude --yes
-npx github:dancampari/harness#v0.10.2 --cli cursor --yes
-npx github:dancampari/harness#v0.10.2 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.10.2 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.10.3 --yes
+npx github:dancampari/harness#v0.10.3 --cli codex --yes
+npx github:dancampari/harness#v0.10.3 --cli claude --yes
+npx github:dancampari/harness#v0.10.3 --cli cursor --yes
+npx github:dancampari/harness#v0.10.3 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.10.3 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -84,7 +84,7 @@ npx github:dancampari/harness#v0.10.2 --cli codex --planning manual --scope glob
 Use one command to refresh Harness in a project that already has `.harness/`:
 
 ```bash
-npx github:dancampari/harness#v0.10.2 upgrade --yes
+npx github:dancampari/harness#v0.10.3 upgrade --yes
 ```
 
 The upgrade command preserves project memory and history:
@@ -148,8 +148,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.10.2 --yes
-npx github:dancampari/harness#v0.10.2 feature new "implement user auth"
+npx github:dancampari/harness#v0.10.3 --yes
+npx github:dancampari/harness#v0.10.3 feature new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -163,21 +163,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.10.2 feature propose
-npx github:dancampari/harness#v0.10.2 feature approve --role planner
-npx github:dancampari/harness#v0.10.2 feature approve --role tester
+npx github:dancampari/harness#v0.10.3 feature propose
+npx github:dancampari/harness#v0.10.3 feature approve --role planner
+npx github:dancampari/harness#v0.10.3 feature approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.10.2 feature qa
-npx github:dancampari/harness#v0.10.2 feature qa --accept-screenshots
-npx github:dancampari/harness#v0.10.2 feature qa --accept-fixtures
-npx github:dancampari/harness#v0.10.2 feature repair
-npx github:dancampari/harness#v0.10.2 feature score
-npx github:dancampari/harness#v0.10.2 run --resume
+npx github:dancampari/harness#v0.10.3 feature qa
+npx github:dancampari/harness#v0.10.3 feature qa --accept-screenshots
+npx github:dancampari/harness#v0.10.3 feature qa --accept-fixtures
+npx github:dancampari/harness#v0.10.3 feature repair
+npx github:dancampari/harness#v0.10.3 feature score
+npx github:dancampari/harness#v0.10.3 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -190,8 +190,8 @@ If QA fails, Harness writes an actionable repair brief:
 .harness/repairs/latest.md
 ```
 
-Agents must read that brief, fix findings, rerun `harness sprint qa`, and
-repeat until the verdict is `PASS`. `harness sprint score` refuses to
+Agents must read that brief, fix findings, rerun `harness feature qa`, and
+repeat until the verdict is `PASS`. `harness feature score` refuses to
 consolidate `FAIL` by default. Use `--allow-fail` only for an explicit
 abandoned-sprint audit trail.
 
@@ -252,7 +252,7 @@ Contract-only automation installs the smaller author/reviewer pack:
 ```
 
 The agent references instruct Codex, Claude Code, or Cursor to read that skill,
-break the user's prompt into a small sprint, call `harness sprint new`, fill the
+break the user's prompt into a small sprint, call `harness feature new`, fill the
 contract Markdown automatically, and route the exact hash through planner/tester
 agreement. In spec-driven mode, they may also create `.harness/design/` and
 `.harness/tasks/` artifacts when the sprint needs more planning depth. Harness
@@ -266,15 +266,15 @@ contracts, reports, memory, screenshots, fixtures, approvals, or progress
 history.
 
 ```bash
-harness sprint status
-harness sprint new "<goal>"
+harness feature status
+harness feature new "<goal>"
 harness contract propose
 harness contract approve --role planner
 harness contract approve --role tester
 harness contract status
-harness sprint qa --format=json
-harness sprint repair
-harness sprint score
+harness feature qa --format=json
+harness feature repair
+harness feature score
 harness doctor [--strict]
 ```
 
@@ -366,18 +366,18 @@ changes after approval, the hash changes and the contract state becomes
 `CHANGED`; it must be proposed and approved again before QA.
 
 Reports generated before the contract reached `AGREED` are treated as stale.
-The TUI shows them as `STALE/BLOCKED`, `harness sprint score` refuses to
-consolidate them, and the agent must rerun `harness sprint qa` after the
+The TUI shows them as `STALE/BLOCKED`, `harness feature score` refuses to
+consolidate them, and the agent must rerun `harness feature qa` after the
 planner/tester approvals.
 
 ## Terminal Layout
 
 ### QA Report
 
-`harness sprint qa` renders a compact terminal card:
+`harness feature qa` renders a compact terminal card:
 
 ```text
-â”Œâ”€ harness sprint qa Â· sprint 001 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+â”Œâ”€ harness feature qa Â· sprint 001 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 â”‚
 â”‚  Verdict: PASS    Total Score: 98/100
 â”‚
@@ -396,7 +396,7 @@ planner/tester approvals.
 â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ```
 
-In an interactive terminal, `harness sprint qa` and `harness sprint score`
+In an interactive terminal, `harness feature qa` and `harness feature score`
 open the markdown evaluation automatically after the report is written. Harness
 tries `HARNESS_EDITOR`, then `cursor`, then `code`, then the OS default opener.
 Set `HARNESS_OPEN_REPORT=0` to disable this behavior.
@@ -505,7 +505,7 @@ harness run --resume --no-alt-screen
 ```
 
 ```text
-harness   Autonomous Development Pipeline   v0.10.2      Project: harness-demo   Agent: codex   Status: PASS
+harness   Autonomous Development Pipeline   v0.10.3      Project: harness-demo   Agent: codex   Status: PASS
 
 [1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 
@@ -553,7 +553,7 @@ JSON reports include:
 - per-dimension scores and findings;
 - configured sensor status: registered, available, executed, error, duration;
 - isolated evaluator process metadata;
-- workspace SHA captured at QA time so `harness sprint score` refuses to consolidate stale reports.
+- workspace SHA captured at QA time so `harness feature score` refuses to consolidate stale reports.
 
 Findings carry an optional `hint` field with an LLM-optimized
 "Suggested fix / Do NOT" pair for well-known rules, surfaced in the
@@ -561,7 +561,7 @@ repair brief under `## Suggested Fixes (LLM-optimized)`.
 
 ## Shift-Left With `--fast`
 
-`harness sprint qa --fast` runs only the fast static-analysis sensors
+`harness feature qa --fast` runs only the fast static-analysis sensors
 (lint, type checks, complexity, architecture, contract structural).
 Dimensions without a fast sensor are marked `SKIPPED` and do not block
 the verdict. The agreement gate is bypassed so the same command works
@@ -569,9 +569,9 @@ during contract authoring. A non-zero exit code on `FAIL` lets git
 hooks block the offending commit.
 
 Fast QA is shift-left only: it does not write the full
-`.harness/reports/sprint-NNN.json` artifact used by `harness sprint
-score`. To consolidate a sprint, run full `harness sprint qa` after the
-contract is agreed, then run `harness sprint score`.
+`.harness/reports/sprint-NNN.json` artifact used by `harness feature
+score`. To consolidate a sprint, run full `harness feature qa` after the
+contract is agreed, then run `harness feature score`.
 
 Install the blocking pre-commit hook with:
 
@@ -669,7 +669,7 @@ stdout. Full I/O contract in `docs/INFERENTIAL_REVIEWER.md`. The
 harness binary itself never embeds an LLM SDK.
 
 Review is automatically excluded from `--fast` and from `harness
-watch`, so the LLM cost only happens on full `harness sprint qa`.
+watch`, so the LLM cost only happens on full `harness feature qa`.
 
 ## Approved Fixtures
 
@@ -700,12 +700,12 @@ If a fixture has no approved expectation, or output changes, QA fails with
 to review the behavior change. Only after explicit approval should it run:
 
 ```bash
-harness sprint qa --accept-fixtures
+harness feature qa --accept-fixtures
 ```
 
 ## Process Isolation
 
-`harness sprint qa` runs in two processes:
+`harness feature qa` runs in two processes:
 
 1. The parent CLI starts an isolated child process with hidden `--internal`.
 2. The child runs sensors and writes JSON/Markdown reports.
@@ -814,8 +814,8 @@ harness session pause ["<note>"]                           # write HANDOFF.md
 harness session resume [--clear]                           # read HANDOFF.md (optionally remove it)
 
 # Deprecated aliases (removed in v2.0):
-harness sprint new <goal>            # → harness feature new
-harness sprint status                # → harness feature status
+harness sprint new <goal>             # -> harness feature new
+harness sprint status                 # -> harness feature status
 harness sprint qa | repair | score | list
 harness contract status | propose | approve | reject    # still supported as primary contract verbs
 

@@ -174,9 +174,9 @@ func ensureAgentProtocolMode(root string, planningMode string) error {
 
 func agentProtocolIsCurrent(text string) bool {
 	return strings.Contains(text, "harness.repair") &&
-		strings.Contains(text, "sprint repair") &&
+		strings.Contains(text, "feature repair") &&
 		strings.Contains(text, ".harness/repairs/latest.md") &&
-		strings.Contains(text, "sprint score` only after QA")
+		strings.Contains(text, "feature score` only after QA")
 }
 
 func protocolHasPlanningMode(text, planningMode string) bool {

@@ -33,7 +33,7 @@ The harness contributes:
 - **Sensors are deterministic**: no LLM inside the harness binary.
   External inferential review is opt-in and runs as a separate
   subprocess.
-- **Workspace SHA pinning**: `harness sprint score` refuses to
+- **Workspace SHA pinning**: `harness feature score` refuses to
   consolidate a report when the working tree changed since QA ran.
 - **Events log** (`.harness/events.jsonl`): every pipeline stage
   appends — contract.created, contract.proposed, contract.agreed,
@@ -66,7 +66,7 @@ The harness            → edit guard before AGREED; sensors detect
                          tdd-violation, scope-creep, missing tests
                        
 TLC's Validate        → verify per acceptance criteria, UAT for complex
-The harness            → harness sprint qa runs every sensor in an
+The harness            → harness feature qa runs every sensor in an
                          isolated subprocess; verdict PASS/FAIL is
                          deterministic; repair brief auto-generated on
                          FAIL with per-rule "Suggested fix / Do NOT"

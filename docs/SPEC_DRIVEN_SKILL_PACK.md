@@ -23,7 +23,7 @@ Harness-native artifacts:
 | Feature spec | `.harness/contracts/sprint-NNN.md` |
 | Design notes | `.harness/design/sprint-NNN.md` when needed |
 | Atomic task plan | `.harness/tasks/sprint-NNN.md` when needed |
-| Execute and verify | `harness sprint qa`, `harness sprint repair`, `harness sprint score` |
+| Execute and verify | `harness feature qa`, `harness feature repair`, `harness feature score` |
 | Validation report | `.harness/reports/latest.json` and `.harness/evaluations/sprint-NNN.md` |
 
 This prevents conflicting instructions between `.specs/` and `.harness/`.
@@ -105,10 +105,10 @@ Required Harness behavior:
 - Guards continue to block product-file edits while the contract is `DRAFT`,
   `PROPOSED`, `CHANGED`, `REJECTED`, `MISSING`, `BLOCKED`, or stale.
 - Agents execute one atomic task at a time.
-- After meaningful changes, agents run `harness sprint qa --format=json`.
-- On `FAIL`, agents run `harness sprint repair`, read
+- After meaningful changes, agents run `harness feature qa --format=json`.
+- On `FAIL`, agents run `harness feature repair`, read
   `.harness/repairs/latest.md`, fix findings, and repeat.
-- `harness sprint score` is allowed only after a non-stale `PASS`.
+- `harness feature score` is allowed only after a non-stale `PASS`.
 
 ## Skill Pack Deliverables
 

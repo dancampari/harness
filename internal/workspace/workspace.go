@@ -1,6 +1,6 @@
 // Package workspace computes a deterministic content hash of the working
 // tree. The hash pins a QA report to the exact code state that produced it
-// so harness sprint score can refuse to consolidate when the working tree
+// so harness feature score can refuse to consolidate when the working tree
 // has drifted since QA ran.
 //
 // The hash is intentionally git-independent: it works in repos that have
