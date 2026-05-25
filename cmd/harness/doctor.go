@@ -12,6 +12,7 @@ import (
 	"github.com/dancampari/harness/internal/config"
 	"github.com/dancampari/harness/internal/detect"
 	"github.com/dancampari/harness/internal/events"
+	"github.com/dancampari/harness/internal/skills"
 	"github.com/spf13/cobra"
 )
 
@@ -356,17 +357,17 @@ func inspectHarnessCoverage(root string, project detect.ProjectInfo, audit *doct
 		checkSpecDrivenCoverage(root, harnessDir, audit)
 	} else if setup.PlanningMode == PlanningContract {
 		if skillsInstalled(harnessDir) {
-			fmt.Println("  OK   contract automation skills installed")
+			fmt.Println("  OK   TLC + harness-gate skill packs installed")
 		} else {
-			fmt.Println("  FAIL contract skills enabled but .harness/skills is missing")
-			audit.fail("contract skills are enabled but .harness/skills is missing")
+			fmt.Println("  FAIL contract skills enabled but .harness/skills/tlc-spec-driven or harness-gate is missing")
+			audit.fail("contract skills are enabled but .harness/skills/tlc-spec-driven or harness-gate is missing")
 		}
-		authorSkill := filepath.Join(harnessDir, "skills", "contract-authoring", "SKILL.md")
-		if fileContains(authorSkill, "sprint repair", "repairs/latest.md") {
-			fmt.Println("  OK   contract-authoring skill includes repair loop")
+		gateSkill := filepath.Join(harnessDir, "skills", "harness-gate", "SKILL.md")
+		if fileContains(gateSkill, "Agreement gate", "QA dimensions") {
+			fmt.Println("  OK   harness-gate skill documents the gate protocol")
 		} else {
-			fmt.Println("  FAIL contract-authoring skill is stale; run harness skills install --force")
-			audit.fail("contract-authoring skill is stale; run harness skills install --force")
+			fmt.Println("  FAIL harness-gate skill is stale; run harness skills install --force")
+			audit.fail("harness-gate skill is stale; run harness skills install --force")
 		}
 	}
 
@@ -454,7 +455,7 @@ func checkGuardHealth(harnessDir string) {
 
 // checkContextBudget surfaces how much agent context the harness memory
 // is consuming. The framework's value depends on the agent actually
-// reading spec.md, progress.md, and context/*.md every session, so
+// reading PROJECT.md, STATE.md, and codebase/*.md every session, so
 // uncontrolled growth there directly hurts the working window. Doctor
 // warns rather than fails because pruning context is a judgement call.
 func checkContextBudget(harnessDir string) {
@@ -463,7 +464,7 @@ func checkContextBudget(harnessDir string) {
 		return
 	}
 	if snap.OverBudget() {
-		fmt.Printf("  WARN context bundle is ~%d tokens (soft limit %d); prune progress.md or context/*.md\n",
+		fmt.Printf("  WARN context bundle is ~%d tokens (soft limit %d); prune .specs/project/STATE.md or .specs/codebase/*.md\n",
 			snap.TokenEstimate, snap.SoftLimitTokens)
 		return
 	}
@@ -508,49 +509,107 @@ func readSetupState(path string) setupState {
 
 func checkSpecDrivenCoverage(root, harnessDir string, audit *doctorAudit) {
 	if specDrivenSkillsInstalled(harnessDir) {
-		fmt.Println("  OK   spec-driven skill pack installed")
+		fmt.Println("  OK   tlc-spec-driven + harness-gate skill packs installed")
 	} else {
-		fmt.Println("  FAIL spec-driven planning enabled but .harness/skills/spec-driven is missing")
-		audit.fail("spec-driven planning enabled but .harness/skills/spec-driven is missing")
+		fmt.Println("  FAIL spec-driven planning enabled but .harness/skills/tlc-spec-driven or harness-gate is missing")
+		audit.fail("spec-driven planning enabled but .harness/skills/tlc-spec-driven or harness-gate is missing")
 	}
-	specSkill := filepath.Join(harnessDir, "skills", "spec-driven", "SKILL.md")
-	if fileContains(specSkill, "Specify", "Design", "Tasks", "Execute", "Validate", ".harness/contracts/sprint-NNN.md") {
-		fmt.Println("  OK   spec-driven skill includes full planning loop")
+	tlcSkill := filepath.Join(harnessDir, "skills", "tlc-spec-driven", "SKILL.md")
+	if fileContains(tlcSkill, "Specify", "Design", "Tasks", "Execute") {
+		fmt.Println("  OK   tlc-spec-driven skill includes full TLC methodology")
 	} else {
-		fmt.Println("  FAIL spec-driven skill is stale; run harness skills install --planning spec-driven --force")
-		audit.fail("spec-driven skill is stale; run harness skills install --planning spec-driven --force")
+		fmt.Println("  FAIL tlc-spec-driven skill is stale; run harness skills install --force")
+		audit.fail("tlc-spec-driven skill is stale; run harness skills install --force")
 	}
-	if fileContains(filepath.Join(harnessDir, "skills", "contract-review", "SKILL.md"), "No implementation starts until the contract status is AGREED") {
-		fmt.Println("  OK   contract-review skill enforces agreement")
+	gateSkill := filepath.Join(harnessDir, "skills", "harness-gate", "SKILL.md")
+	if fileContains(gateSkill, "Agreement gate", "QA dimensions", "Events log") {
+		fmt.Println("  OK   harness-gate skill documents the deterministic gate protocol")
 	} else {
-		fmt.Println("  FAIL contract-review skill is stale; run harness skills install --planning spec-driven --force")
-		audit.fail("contract-review skill is stale; run harness skills install --planning spec-driven --force")
+		fmt.Println("  FAIL harness-gate skill is stale; run harness skills install --force")
+		audit.fail("harness-gate skill is stale; run harness skills install --force")
 	}
-	for _, rel := range []string{
-		".harness/context/STACK.md",
-		".harness/context/ARCHITECTURE.md",
-		".harness/context/CONVENTIONS.md",
-		".harness/context/TESTING.md",
-		".harness/context/INTEGRATIONS.md",
-		".harness/context/CONCERNS.md",
-	} {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
-			fmt.Printf("  WARN %s is missing\n", rel)
-			audit.warn(rel + " is missing")
+	checkVendoredSkillDrift(harnessDir, audit)
+	for _, name := range []string{"STACK.md", "ARCHITECTURE.md", "CONVENTIONS.md", "TESTING.md", "INTEGRATIONS.md", "CONCERNS.md"} {
+		canonical := filepath.Join(root, ".specs", "codebase", name)
+		legacy := filepath.Join(root, ".harness", "context", name)
+		if _, err := os.Stat(canonical); err == nil {
+			continue
 		}
+		if _, err := os.Stat(legacy); err == nil {
+			continue
+		}
+		fmt.Printf("  WARN .specs/codebase/%s is missing\n", name)
+		audit.warn(".specs/codebase/" + name + " is missing")
 	}
-	if _, err := os.Stat(filepath.Join(harnessDir, "design")); err == nil {
-		fmt.Println("  OK   design artifact directory exists")
-	} else {
-		fmt.Println("  FAIL .harness/design is missing")
-		audit.fail(".harness/design is missing")
+	checkFeatureArtifactsDir(root, harnessDir, audit)
+}
+
+// checkVendoredSkillDrift compares the canonical skill packs vendored
+// into the harness binary against what is installed in the project.
+// Any byte-level mismatch is surfaced as a strict-doctor failure with
+// the suggested fix; non-strict runs see a warning so the project keeps
+// running while the user decides when to refresh.
+//
+// The check fails open: any error reading the embedded or on-disk
+// content is reported as a warning, never a hard failure, so a brittle
+// filesystem can't block doctor from running.
+func checkVendoredSkillDrift(harnessDir string, audit *doctorAudit) {
+	for _, packName := range []string{"tlc-spec-driven", "harness-gate"} {
+		vendored, err := skills.VendoredHash(packName)
+		if err != nil {
+			fmt.Printf("  WARN unable to hash vendored %s: %v\n", packName, err)
+			audit.warn("unable to hash vendored " + packName)
+			continue
+		}
+		installed, err := skills.InstalledHash(harnessDir, packName)
+		if err != nil {
+			fmt.Printf("  WARN unable to hash installed %s: %v\n", packName, err)
+			audit.warn("unable to hash installed " + packName)
+			continue
+		}
+		if installed == "" {
+			// Not installed at all — the install/Installed check above
+			// already reports this; do not double-warn.
+			continue
+		}
+		if installed != vendored {
+			fmt.Printf("  FAIL %s skill pack drift; installed=%s vendored=%s — run harness skills install --force\n",
+				packName, shortDigest(installed), shortDigest(vendored))
+			audit.fail(packName + " skill pack drift; run harness skills install --force")
+			continue
+		}
+		fmt.Printf("  OK   %s skill pack matches vendored hash %s\n", packName, shortDigest(vendored))
 	}
-	if _, err := os.Stat(filepath.Join(harnessDir, "tasks")); err == nil {
-		fmt.Println("  OK   task artifact directory exists")
-	} else {
-		fmt.Println("  FAIL .harness/tasks is missing")
-		audit.fail(".harness/tasks is missing")
+}
+
+func shortDigest(h string) string {
+	if len(h) < 12 {
+		return h
 	}
+	return h[:12]
+}
+
+// checkFeatureArtifactsDir reports whether the canonical .specs/features/
+// tree exists, falling back to the legacy .harness/design and tasks dirs.
+// During the dual-layout transition (Phase 2) projects may not yet have
+// migrated; the harness honours either layout.
+func checkFeatureArtifactsDir(root, harnessDir string, audit *doctorAudit) {
+	canonical := filepath.Join(root, ".specs", "features")
+	if _, err := os.Stat(canonical); err == nil {
+		fmt.Println("  OK   .specs/features/ directory exists")
+		return
+	}
+	legacyDesign := filepath.Join(harnessDir, "design")
+	legacyTasks := filepath.Join(harnessDir, "tasks")
+	_, designErr := os.Stat(legacyDesign)
+	_, tasksErr := os.Stat(legacyTasks)
+	if designErr == nil && tasksErr == nil {
+		fmt.Println("  WARN legacy .harness/design + .harness/tasks present; run `harness upgrade` to migrate to .specs/features/")
+		audit.warn("legacy design/tasks layout; run harness upgrade to migrate")
+		return
+	}
+	fmt.Println("  FAIL .specs/features/ is missing")
+	audit.fail(".specs/features/ is missing")
 }
 
 func expectedReferences(setupCLI string, detected []string) []string {

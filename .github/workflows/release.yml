@@ -25,9 +25,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Verify
         run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          test "v${PACKAGE_VERSION}" = "${GITHUB_REF_NAME}"
           test -z "$(gofmt -l .)"
           go vet ./...
           go test ./...
@@ -59,3 +62,13 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" dist/release/* \
             --title "Harness ${GITHUB_REF_NAME}" \
             --generate-notes
+
+      - name: Publish npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN is not configured; skipping npm publish."
+            exit 0
+          fi
+          npm publish --access public

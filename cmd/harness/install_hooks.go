@@ -294,6 +294,7 @@ func installClaudeAgents(planningMode string) error {
 	if planningMode == PlanningSpecDriven {
 		files[filepath.Join(dir, "harness-spec-planner.md")] = claudeSpecPlannerAgent
 		files[filepath.Join(dir, "harness-task-worker.md")] = claudeTaskWorkerAgent
+		files[filepath.Join(dir, "harness-researcher.md")] = claudeResearcherAgent
 	}
 	for path, content := range files {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -451,6 +452,7 @@ func installCodexAgents(planningMode string) error {
 	if planningMode == PlanningSpecDriven {
 		files[filepath.Join(dir, "harness-spec-planner.toml")] = codexSpecPlannerAgent
 		files[filepath.Join(dir, "harness-task-worker.toml")] = codexTaskWorkerAgent
+		files[filepath.Join(dir, "harness-researcher.toml")] = codexResearcherAgent
 	}
 	for path, content := range files {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -609,12 +611,12 @@ Harness function calls:
 
 Autonomous protocol:
 
-1. Read .harness/progress.md to recover context from previous sessions.
-2. Read .harness/spec.md for the global product spec.
+1. Read .specs/project/STATE.md to recover context from previous sessions.
+2. Read .specs/project/PROJECT.md for the global product spec.
 3. Read .harness/agent-protocol.md for the current Harness function contract.
 4. Run ` + "`" + invoke + ` sprint status` + "`" + ` before starting implementation.
 5. If no active sprint contract exists, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
-   and fill in the contract at .harness/contracts/sprint-NNN.md with:
+   and fill in the contract at .specs/features/sprint-NNN/spec.md with:
    - Deliverables (files + symbols expected)
    - Acceptance Criteria (with thresholds 1-10)
    - Constraints (forbidden imports, complexity limits)
@@ -646,6 +648,9 @@ baseline approval via ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + 
 
 Never run ` + "`" + invoke + ` sprint qa --allow-unagreed` + "`" + ` unless the user explicitly asks for an emergency override.
 Never declare a task done without a passing, non-stale QA verdict from Harness.
+
+` + tlcMultiAgentProtocol(invoke) + `
+` + SkillIntegrationsBlock(".") + `
 `
 }
 
@@ -677,7 +682,7 @@ Harness function calls:
 
 Autonomous protocol for Claude Code:
 
-1. At session start, read .harness/progress.md, .harness/spec.md, and
+1. At session start, read .specs/project/STATE.md, .specs/project/PROJECT.md, and
    .harness/agent-protocol.md.
 2. Run ` + "`" + invoke + ` sprint status` + "`" + ` before implementation.
 3. Create or update the sprint contract when needed.
@@ -696,6 +701,9 @@ Only ask the user for product decisions, acceptance criteria changes,
 dependency installation approval when it changes the project stack, or visual
 baseline approval via ` + "`" + invoke + ` sprint qa --accept-screenshots` + "`" + `, or approved-fixture
 baseline approval via ` + "`" + invoke + ` sprint qa --accept-fixtures` + "`" + `.
+
+` + tlcMultiAgentProtocol(invoke) + `
+` + SkillIntegrationsBlock(".") + `
 `
 }
 
@@ -708,12 +716,12 @@ alwaysApply: true
 
 This project uses Harness Engineering. Always:
 
-1. On session start, read .harness/progress.md and .harness/spec.md.
+1. On session start, read .specs/project/STATE.md and .specs/project/PROJECT.md.
 2. Read .harness/agent-protocol.md. It defines the Harness functions you must
    call autonomously through CLI commands.
 ` + cursorPlanningAutomationProtocol(planningMode) + `
 4. Before implementing a feature, ensure a contract exists at
-   .harness/contracts/sprint-NNN.md. If not, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
+   .specs/features/sprint-NNN/spec.md. If not, run ` + "`" + invoke + ` sprint new "<goal>"` + "`" + `
    and fill it in.
 5. Run ` + "`" + invoke + ` contract propose` + "`" + ` after writing the contract. Do not
    implement until ` + "`" + invoke + ` contract status` + "`" + ` returns AGREED.
@@ -730,24 +738,84 @@ Consult ` + "`" + invoke + ` trend` + "`" + ` to understand the quality trajecto
 `
 }
 
+// tlcMultiAgentProtocol returns the shared block injected into every
+// generated agent file (AGENTS.md, CLAUDE.md). It encodes TLC's
+// sub-agent delegation matrix (SKILL.md lines 122-131) and the
+// Knowledge Verification Chain so the orchestrating agent knows when to
+// spawn a sub-agent, what context to hand it, and which events to emit
+// at each decision point. Events feed .harness/events.jsonl which the
+// live panel renders; the agent calls them via `harness` events helpers
+// embedded in the agent runtimes.
+func tlcMultiAgentProtocol(invoke string) string {
+	return `## Sub-Agent Delegation (TLC matrix)
+
+Delegate to a sub-agent only when TLC SKILL.md says "Yes":
+
+| Activity                                  | Delegate? | Why                                                                 |
+|-------------------------------------------|-----------|---------------------------------------------------------------------|
+| Research / brownfield mapping             | Yes       | Output is large; only the summary matters to the main context.       |
+| Implementing one task from tasks.md       | Yes       | Edits + test output consume context; only the result matters.        |
+| Parallel ` + "`" + `[P]` + "`" + ` tasks                          | Yes (one per task) | The only way to actually run tasks in parallel.            |
+| Sequential tasks (no ` + "`" + `[P]` + "`" + `)                   | Yes       | Keeps implementation artifacts out of the main context.              |
+| Planning, task creation, validation       | No        | Requires the full accumulated context to stay coherent.              |
+| Quick mode (` + "`" + invoke + ` quick "<one-line>"` + "`" + `)        | No        | Too small to justify the sub-agent overhead.                          |
+
+Each delegation MUST hand the sub-agent only:
+- the specific task definition (What / Where / Depends on / Reuses / Done when / Tests / Gate)
+- coding-principles.md and CONVENTIONS.md
+- TESTING.md if it exists
+- the spec/design sections the task references
+
+Sub-agents MUST NOT receive: other tasks' definitions, accumulated chat
+history, STATE.md, or validation reports from other tasks.
+
+Sub-agents MUST report back: Status (Complete | Blocked | Partial), files
+changed, gate check result with test counts, SPEC_DEVIATION markers, and
+issues encountered. The orchestrator uses that to update tasks.md,
+traceability, and decide next steps.
+
+Emit events for delegation boundaries so the live panel renders them:
+
+- ` + "`" + `agent.delegate.research` + "`" + `       — spawned a research sub-agent
+- ` + "`" + `agent.delegate.implement` + "`" + `      — spawned an implementation sub-agent
+- ` + "`" + `agent.delegate.parallel` + "`" + `       — spawned a parallel ` + "`" + `[P]` + "`" + ` sub-agent batch
+- ` + "`" + `agent.subagent.done` + "`" + `           — a sub-agent returned (include Status + files-changed count)
+
+## Knowledge Verification Chain
+
+When you need information not already in your context, follow TLC's
+verification order, emitting an event at each step before moving to the
+next. Stop as soon as a step yields a confident answer.
+
+1. Codebase — read existing source files first. Emit ` + "`" + `verification.codebase` + "`" + `.
+2. Project docs — check ` + "`" + `.specs/codebase/*.md` + "`" + ` and ` + "`" + `.specs/project/STATE.md` + "`" + `. Emit ` + "`" + `verification.docs` + "`" + `.
+3. Context7 MCP — if available, query for upstream library/API behaviour. Emit ` + "`" + `verification.context7` + "`" + `.
+4. Web — search only as a last resort, prefer first-party sources. Emit ` + "`" + `verification.web` + "`" + `.
+5. Uncertain — if the chain ends without a confident answer, emit ` + "`" + `verification.uncertain` + "`" + ` and ask the user; do NOT invent.
+
+These events feed ` + "`" + `.harness/events.jsonl` + "`" + ` and the live TUI's chain
+panel. They are not enforced by the harness — they are the contract the
+agent commits to so the human reviewer can see what was actually checked.
+`
+}
+
 func planningAutomationProtocol(mode string) string {
 	switch normalizePlanningMode(mode) {
 	case PlanningSpecDriven:
 		return `Spec-driven automation is enabled.
 
-Before creating or editing a sprint contract, read:
+Before creating or editing a sprint contract, read in this order:
 
-- .harness/skills/spec-driven/SKILL.md
-- .harness/skills/contract-authoring/SKILL.md
-- .harness/skills/contract-review/SKILL.md
+- .harness/skills/tlc-spec-driven/SKILL.md (TLC methodology — how to specify, design, break into tasks, implement, validate)
+- .harness/skills/harness-gate/SKILL.md (the deterministic gates the harness adds on top of TLC)
 
-Use the Harness-native Specify -> Design -> Tasks -> Execute -> Validate flow:
+Use the TLC Specify -> Design -> Tasks -> Execute -> Validate flow:
 
 1. Specify the user's request as the smallest useful sprint contract under
-   .harness/contracts/sprint-NNN.md.
-2. Create .harness/design/sprint-NNN.md only when architecture, data model,
+   .specs/features/sprint-NNN/spec.md.
+2. Create .specs/features/sprint-NNN/design.md only when architecture, data model,
    security, or integration choices need an explicit decision record.
-3. Create .harness/tasks/sprint-NNN.md when the work needs atomic task tracking.
+3. Create .specs/features/sprint-NNN/tasks.md when the work needs atomic task tracking.
 4. Propose the contract hash and route it through planner/tester agreement.
 5. Implement only after AGREED.
 6. Validate with Harness QA, repair failures, and score only after PASS.
@@ -767,12 +835,12 @@ export. Harness-native artifacts under .harness/ are the source of truth.`
 	case PlanningContract:
 		return `Contract automation skills are enabled.
 
-Before creating or editing a sprint contract, read:
+Before creating or editing a sprint contract, read in this order:
 
-- .harness/skills/contract-authoring/SKILL.md
-- .harness/skills/contract-review/SKILL.md
+- .harness/skills/tlc-spec-driven/SKILL.md (TLC methodology)
+- .harness/skills/harness-gate/SKILL.md (deterministic gates)
 
-Use that skill to decompose the user's prompt into small sprints, create the
+Use the TLC method to decompose the user's prompt into small sprints, create the
 current sprint contract, fill the Markdown completely, propose the hash, and
 route it through planner/tester agreement.
 
@@ -809,15 +877,16 @@ func cursorPlanningAutomationProtocol(mode string) string {
 	switch normalizePlanningMode(mode) {
 	case PlanningSpecDriven:
 		return `3. Spec-driven automation is enabled. Before creating or editing a
-   sprint contract, read .harness/skills/spec-driven/SKILL.md and
-   .harness/skills/contract-review/SKILL.md. Use the Harness-native
-   Specify -> Design -> Tasks -> Execute -> Validate flow, but keep .harness/
+   sprint contract, read .harness/skills/tlc-spec-driven/SKILL.md (TLC method)
+   then .harness/skills/harness-gate/SKILL.md (deterministic gates). Use the
+   TLC Specify -> Design -> Tasks -> Execute -> Validate flow, keeping .harness/
    as the only source of truth.
 `
 	case PlanningContract:
 		return `3. Contract automation skills are enabled. Before creating or editing a
-   sprint contract, read .harness/skills/contract-authoring/SKILL.md. Use it to
-   decompose the user's prompt and fill the contract automatically.
+   sprint contract, read .harness/skills/tlc-spec-driven/SKILL.md then
+   .harness/skills/harness-gate/SKILL.md. Use the TLC method to decompose the
+   user's prompt and fill the contract automatically.
 `
 	}
 	return `3. Planning automation is disabled. Do not invent detailed sprint
@@ -833,7 +902,7 @@ func cursorContractAutomationProtocol(enabled bool) string {
 }
 
 const codexContractAuthorAgent = `name = "harness_contract_author"
-description = "MUST BE USED in Harness projects before implementation when a sprint contract is missing, DRAFT, CHANGED, or REJECTED. Creates or repairs .harness/contracts/sprint-NNN.md only."
+description = "MUST BE USED in Harness projects before implementation when a sprint contract is missing, DRAFT, CHANGED, or REJECTED. Creates or repairs .specs/features/sprint-NNN/spec.md only."
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
@@ -842,9 +911,9 @@ You are the Harness contract author/planner.
 Your only job is to transform the user's request into a small, testable Harness sprint contract or repair a rejected/weak contract.
 
 Rules:
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/contract-authoring/SKILL.md.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, .harness/skills/tlc-spec-driven/SKILL.md, and .harness/skills/harness-gate/SKILL.md.
 - Do not edit product/application files.
-- Edit only .harness/contracts/sprint-NNN.md and, when useful, .harness/progress.md.
+- Edit only .specs/features/sprint-NNN/spec.md and, when useful, .specs/project/STATE.md.
 - Keep the sprint small and objective.
 - Include concrete deliverables, acceptance criteria with thresholds, and constraints.
 - Run harness contract propose after writing the contract.
@@ -865,7 +934,7 @@ You are the independent Harness tester/reviewer.
 Your job is to decide whether the proposed sprint contract is good enough for implementation.
 
 Rules:
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, .harness/skills/contract-review/SKILL.md, and the current .harness/contracts/sprint-NNN.md.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, .harness/skills/tlc-spec-driven/SKILL.md, .harness/skills/harness-gate/SKILL.md, and the current .specs/features/sprint-NNN/spec.md.
 - Review only the contract. Do not edit files.
 - Run harness contract status.
 - If the contract is DRAFT or CHANGED, tell the parent agent to use harness_contract_author and propose the contract.
@@ -886,13 +955,13 @@ You are the Harness spec-driven planner.
 Your job is to transform the user's request into Harness-native planning artifacts before implementation.
 
 Rules:
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/spec-driven/SKILL.md.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, .harness/skills/tlc-spec-driven/SKILL.md, and .harness/skills/harness-gate/SKILL.md.
 - Do not edit product/application files.
-- Edit only .harness/contracts/sprint-NNN.md, .harness/design/sprint-NNN.md, .harness/tasks/sprint-NNN.md, .harness/context/*.md, and .harness/progress.md when useful.
+- Edit only .specs/features/sprint-NNN/spec.md, .specs/features/sprint-NNN/design.md, .specs/features/sprint-NNN/tasks.md, .specs/codebase/*.md, and .specs/project/STATE.md when useful.
 - Keep .harness/ as the source of truth. Do not create .specs/ unless the user explicitly asks for export compatibility.
 - Create the smallest useful sprint contract with requirement IDs, deliverables, acceptance criteria, constraints, and verification evidence.
-- Add .harness/design/sprint-NNN.md only when the sprint has architecture, data model, integration, or security decisions.
-- Add .harness/tasks/sprint-NNN.md when the work needs atomic task tracking.
+- Add .specs/features/sprint-NNN/design.md only when the sprint has architecture, data model, integration, or security decisions.
+- Add .specs/features/sprint-NNN/tasks.md when the work needs atomic task tracking.
 - Run harness contract propose after writing or repairing the contract.
 - Approve only the planner role when the contract is complete: harness contract approve --role planner.
 - If tester rejects the contract, repair planning artifacts first, propose the new hash, and approve planner again.
@@ -909,7 +978,7 @@ You are the Harness task worker.
 
 Rules:
 - Before editing product files, run harness contract status and confirm the current sprint is AGREED.
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, the current contract, and .harness/tasks/sprint-NNN.md if present.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, the current contract, and .specs/features/sprint-NNN/tasks.md if present.
 - Implement only the current agreed sprint and preferably one atomic task at a time.
 - Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness_spec_planner.
 - After meaningful changes, run harness sprint qa --format=json.
@@ -919,9 +988,36 @@ Rules:
 """
 `
 
+// codexResearcherAgent is the Codex counterpart to claudeResearcherAgent:
+// a read-only sub-agent for TLC's research / brownfield-mapping row.
+const codexResearcherAgent = `name = "harness_researcher"
+description = "MUST BE USED for TLC research and brownfield mapping. Reads code, docs, and external references on demand; returns a concise summary plus the consulted paths. Does NOT edit files."
+sandbox_mode = "read-only"
+
+developer_instructions = """
+You are the Harness researcher.
+
+Your job: produce a tight written briefing the orchestrator can paste back
+into its working context. Mirror TLC's Knowledge Verification Chain
+(codebase → docs → context7 → web → uncertain) when gathering facts.
+
+Rules:
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .specs/codebase/*.md, and any spec/design section the task references.
+- Run harness state record lesson "<one line>" when you discover something the next session must remember.
+- Use Read, Grep, Glob, and read-only Bash. Never run mutating commands.
+- Return a markdown briefing with these sections:
+  - Question (1 sentence)
+  - Findings (bullet list, each ≤2 sentences)
+  - Files Consulted (relative paths)
+  - Knowledge Verification Chain (which steps from codebase/docs/context7/web you used; mark "uncertain" if you stopped without confidence)
+  - Suggested next step for the orchestrator
+- Never edit product files. If a finding implies a change, surface it as a suggestion only.
+"""
+`
+
 const claudeContractAuthorAgent = `---
 name: harness-contract-author
-description: MUST BE USED before implementation in Harness projects when a sprint contract is missing, DRAFT, CHANGED, or REJECTED. Creates or repairs .harness/contracts/sprint-NNN.md only.
+description: MUST BE USED before implementation in Harness projects when a sprint contract is missing, DRAFT, CHANGED, or REJECTED. Creates or repairs .specs/features/sprint-NNN/spec.md only.
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: inherit
 ---
@@ -931,9 +1027,9 @@ You are the Harness contract author/planner.
 Your only job is to transform the user's request into a small, testable Harness sprint contract or repair a rejected/weak contract.
 
 Rules:
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/contract-authoring/SKILL.md.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, .harness/skills/tlc-spec-driven/SKILL.md, and .harness/skills/harness-gate/SKILL.md.
 - Do not edit product/application files.
-- Edit only .harness/contracts/sprint-NNN.md and, when useful, .harness/progress.md.
+- Edit only .specs/features/sprint-NNN/spec.md and, when useful, .specs/project/STATE.md.
 - Keep the sprint small and objective.
 - Include concrete deliverables, acceptance criteria with thresholds, and constraints.
 - Run harness contract propose after writing the contract.
@@ -955,7 +1051,7 @@ You are the independent Harness tester/reviewer.
 Your job is to decide whether the proposed sprint contract is good enough for implementation.
 
 Rules:
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, .harness/skills/contract-review/SKILL.md, and the current .harness/contracts/sprint-NNN.md.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, .harness/skills/tlc-spec-driven/SKILL.md, .harness/skills/harness-gate/SKILL.md, and the current .specs/features/sprint-NNN/spec.md.
 - Review only the contract. Do not edit files.
 - Run harness contract status.
 - If the contract is DRAFT or CHANGED, tell the parent agent to use harness-contract-author and propose the contract.
@@ -975,13 +1071,13 @@ model: inherit
 You are the Harness spec-driven planner.
 
 Rules:
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, and .harness/skills/spec-driven/SKILL.md.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, .harness/skills/tlc-spec-driven/SKILL.md, and .harness/skills/harness-gate/SKILL.md.
 - Do not edit product/application files.
-- Edit only .harness/contracts/sprint-NNN.md, .harness/design/sprint-NNN.md, .harness/tasks/sprint-NNN.md, .harness/context/*.md, and .harness/progress.md when useful.
+- Edit only .specs/features/sprint-NNN/spec.md, .specs/features/sprint-NNN/design.md, .specs/features/sprint-NNN/tasks.md, .specs/codebase/*.md, and .specs/project/STATE.md when useful.
 - Keep .harness/ as the source of truth. Do not create .specs/ unless the user explicitly asks for export compatibility.
 - Create the smallest useful sprint contract with requirement IDs, deliverables, acceptance criteria, constraints, and verification evidence.
-- Add .harness/design/sprint-NNN.md only when the sprint has architecture, data model, integration, or security decisions.
-- Add .harness/tasks/sprint-NNN.md when the work needs atomic task tracking.
+- Add .specs/features/sprint-NNN/design.md only when the sprint has architecture, data model, integration, or security decisions.
+- Add .specs/features/sprint-NNN/tasks.md when the work needs atomic task tracking.
 - Run harness contract propose after writing or repairing the contract.
 - Approve only the planner role when the contract is complete: harness contract approve --role planner.
 - If tester rejects the contract, repair planning artifacts first, propose the new hash, and approve planner again.
@@ -999,11 +1095,42 @@ You are the Harness task worker.
 
 Rules:
 - Before editing product files, run harness contract status and confirm the current sprint is AGREED.
-- Read .harness/spec.md, .harness/progress.md, .harness/agent-protocol.md, the current contract, and .harness/tasks/sprint-NNN.md if present.
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .harness/agent-protocol.md, the current contract, and .specs/features/sprint-NNN/tasks.md if present.
 - Implement only the current agreed sprint and preferably one atomic task at a time.
 - Do not change the contract to make implementation easier. If the contract is wrong, stop and route back to harness-spec-planner.
 - After meaningful changes, run harness sprint qa --format=json.
 - If Harness Doctor reports safe config drift, run harness doctor --fix before asking the user.
 - If QA fails, run harness sprint repair, read .harness/repairs/latest.md, fix findings, and rerun QA until PASS.
 - Run harness sprint score only after QA is PASS.
+`
+
+// claudeResearcherAgent implements TLC's "Research / brownfield mapping"
+// delegation row. The orchestrator spawns this persona for one-shot
+// codebase mapping or external-fact-finding work whose verbose output
+// must not contaminate the main context. The persona returns ONLY a
+// summary plus the file paths consulted.
+const claudeResearcherAgent = `---
+name: harness-researcher
+description: MUST BE USED for TLC research and brownfield mapping. Reads code, docs, and external references on demand; returns a concise summary plus the consulted paths. Does NOT edit files.
+tools: Read, Grep, Glob, Bash
+model: inherit
+---
+
+You are the Harness researcher.
+
+Your job: produce a tight written briefing the orchestrator can paste back
+into its working context. Mirror TLC's Knowledge Verification Chain
+(codebase → docs → context7 → web → uncertain) when gathering facts.
+
+Rules:
+- Read .specs/project/PROJECT.md, .specs/project/STATE.md, .specs/codebase/*.md, and any spec/design section the task references.
+- Run harness state record lesson "<one line>" when you discover something the next session must remember.
+- Use Read, Grep, Glob, and read-only Bash. Never run mutating commands.
+- Return a markdown briefing with these sections:
+  - Question (1 sentence)
+  - Findings (bullet list, each ≤2 sentences)
+  - Files Consulted (relative paths)
+  - Knowledge Verification Chain (which steps from codebase/docs/context7/web you used; mark "uncertain" if you stopped without confidence)
+  - Suggested next step for the orchestrator
+- Never edit product files. If a finding implies a change, surface it as a suggestion only.
 `

@@ -5,6 +5,42 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project follows [Semantic Versioning](https://semver.org/) once
 production-ready.
 
+## [0.10.0] - 2026-05-25
+
+TLC unification and hardening release.
+
+### Added
+
+- Vendored TLC `tlc-spec-driven` skill pack and the Harness-specific
+  `harness-gate` skill pack are embedded in the binary and installed
+  together.
+- `.specs/` is now the canonical project memory and feature artifact
+  tree, with migration from legacy `.harness/{spec,progress,contracts}`.
+- New TLC command surface: `harness feature`, `harness quick`,
+  `harness roadmap`, `harness state`, and `harness session`.
+- Deterministic TLC contract sensors for `SPEC_DEVIATION`, scope creep,
+  TDD violations, and test-count regressions.
+- Practical package smoke script: `npm run smoke:package`.
+
+### Changed
+
+- Spec-driven planning now rejects unresolved template placeholders at
+  propose time.
+- `harness init --planning spec-driven` persists `planning_mode` in
+  `.harness/setup.json`, so policy gates are active immediately.
+- `harness sprint` remains available as a deprecated alias for
+  `harness feature`.
+- `harness sprint qa --fast` is documented as shift-left only; full QA is
+  required before `harness sprint score`.
+
+### Fixed
+
+- Internal QA, reviewer, architecture, TUI, spec, progress, context, and
+  score paths now resolve through the canonical `.specs/` layout with
+  explicit legacy fallback.
+- TLC contract findings that indicate process violations now hard-fail
+  the contract gate instead of being diluted by score averages.
+
 ## [0.9.1] - 2026-05-22
 
 Post-0.9.0 fixes and the realtime TUI work.

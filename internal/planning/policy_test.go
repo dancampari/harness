@@ -79,14 +79,61 @@ func TestPolicyErrorsAcceptCompliantSpecDrivenContract(t *testing.T) {
 			{
 				Number:        1,
 				RequirementID: "REQ-001",
-				Statement:     "delivers",
+				Statement:     "WHEN the agent runs the build THEN the system SHALL emit x.ts",
 				Evidence:      planner.Evidence{Kind: "tests", Ref: "delivers x"},
 				Threshold:     8,
 			},
 		},
+		RawMarkdown: "# Sprint 002\n\n## Edge Cases\n- empty input\n\n## Out of Scope\n- migrations\n",
 	}
 	if errs := ContractPolicyErrors(ModeSpecDriven, c); len(errs) != 0 {
 		t.Fatalf("expected no policy errors, got %v", errs)
+	}
+}
+
+func TestPolicyErrorsRejectSpecDrivenContractWithoutWhenThenShall(t *testing.T) {
+	c := &planner.Contract{
+		SprintNumber: 3,
+		Title:        "non-tlc criterion",
+		Goal:         "ship",
+		Requirements: []planner.Requirement{{ID: "REQ-001", Statement: "ships"}},
+		Deliverables: []planner.Deliverable{{Path: "x.ts", RequirementID: "REQ-001"}},
+		Criteria: []planner.AcceptanceCriterion{{
+			Number:        1,
+			RequirementID: "REQ-001",
+			Statement:     "the system delivers x",
+			Evidence:      planner.Evidence{Kind: "tests", Ref: "delivers x"},
+			Threshold:     8,
+		}},
+		RawMarkdown: "# Sprint 003\n\n## Edge Cases\n- empty input\n\n## Out of Scope\n- migrations\n",
+	}
+	errs := ContractPolicyErrors(ModeSpecDriven, c)
+	joined := strings.Join(errs, "\n")
+	if !strings.Contains(joined, "WHEN/THEN/SHALL") {
+		t.Fatalf("expected WHEN/THEN/SHALL violation, got: %v", errs)
+	}
+}
+
+func TestPolicyErrorsRejectSpecDrivenContractMissingEdgeCases(t *testing.T) {
+	c := &planner.Contract{
+		SprintNumber: 4,
+		Title:        "no edge cases",
+		Goal:         "ship",
+		Requirements: []planner.Requirement{{ID: "REQ-001", Statement: "ships"}},
+		Deliverables: []planner.Deliverable{{Path: "x.ts", RequirementID: "REQ-001"}},
+		Criteria: []planner.AcceptanceCriterion{{
+			Number:        1,
+			RequirementID: "REQ-001",
+			Statement:     "WHEN built THEN system SHALL emit x",
+			Evidence:      planner.Evidence{Kind: "tests", Ref: "delivers x"},
+			Threshold:     8,
+		}},
+		RawMarkdown: "# Sprint 004\n\n## Out of Scope\n- migrations\n",
+	}
+	errs := ContractPolicyErrors(ModeSpecDriven, c)
+	joined := strings.Join(errs, "\n")
+	if !strings.Contains(joined, "Edge Cases") {
+		t.Fatalf("expected Edge Cases violation, got: %v", errs)
 	}
 }
 

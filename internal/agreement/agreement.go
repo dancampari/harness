@@ -16,6 +16,7 @@ import (
 
 	"github.com/dancampari/harness/internal/planner"
 	"github.com/dancampari/harness/internal/planning"
+	"github.com/dancampari/harness/internal/traceability"
 )
 
 const SchemaVersion = "1"
@@ -23,7 +24,8 @@ const SchemaVersion = "1"
 var DefaultRequiredRoles = []string{"planner", "tester"}
 
 type Manager struct {
-	root string
+	root      string
+	specsRoot string
 }
 
 type Lock struct {
@@ -71,31 +73,117 @@ func NewManager(root string) *Manager {
 	if root == "" {
 		root = ".harness"
 	}
-	return &Manager{root: root}
+	return &Manager{root: root, specsRoot: defaultSpecsRoot(root)}
+}
+
+// defaultSpecsRoot derives the .specs/ directory from the .harness/ root.
+// Both live as siblings in the workspace; tests pass absolute temp paths,
+// which still resolve correctly via filepath.Dir.
+func defaultSpecsRoot(harnessRoot string) string {
+	clean := filepath.Clean(harnessRoot)
+	parent := filepath.Dir(clean)
+	if parent == "" || parent == "." {
+		return ".specs"
+	}
+	return filepath.Join(parent, ".specs")
+}
+
+func (m *Manager) Root() string {
+	return m.root
+}
+
+func (m *Manager) SpecsRoot() string {
+	return m.specsRoot
+}
+
+func featureSlug(sprintNumber int) string {
+	return fmt.Sprintf("sprint-%03d", sprintNumber)
+}
+
+// featureDir returns the canonical .specs/features/<slug>/ directory.
+func (m *Manager) featureDir(sprintNumber int) string {
+	return filepath.Join(m.specsRoot, "features", featureSlug(sprintNumber))
+}
+
+// resolveArtifact returns the canonical .specs/ path when that file is
+// already present, otherwise the legacy .harness/ path. This lets new
+// projects write under .specs/ while existing projects continue to work
+// until `harness upgrade` migrates them.
+func (m *Manager) resolveArtifact(sprintNumber int, specsName, legacyDir string) string {
+	specsPath := filepath.Join(m.featureDir(sprintNumber), specsName)
+	if _, err := os.Stat(specsPath); err == nil {
+		if specsName == "spec.md" {
+			legacyPath := filepath.Join(m.root, legacyDir, fmt.Sprintf("sprint-%03d.md", sprintNumber))
+			if hasTemplatePlaceholders(specsPath) {
+				if _, legacyErr := os.Stat(legacyPath); legacyErr == nil {
+					return legacyPath
+				}
+			}
+		}
+		return specsPath
+	}
+	return filepath.Join(m.root, legacyDir, fmt.Sprintf("sprint-%03d.md", sprintNumber))
+}
+
+func hasTemplatePlaceholders(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return len(planner.TemplatePlaceholderErrors(string(b))) > 0
 }
 
 func (m *Manager) CurrentSprintNumber() (int, error) {
-	dir := filepath.Join(m.root, "contracts")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
+	max := 0
+
+	// Canonical .specs/features/sprint-NNN/spec.md
+	featuresDir := filepath.Join(m.specsRoot, "features")
+	if entries, err := os.ReadDir(featuresDir); err == nil {
+		re := regexp.MustCompile(`^sprint-(\d+)$`)
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			match := re.FindStringSubmatch(entry.Name())
+			if match == nil {
+				continue
+			}
+			spec := filepath.Join(featuresDir, entry.Name(), "spec.md")
+			if _, err := os.Stat(spec); err != nil {
+				continue
+			}
+			var n int
+			fmt.Sscanf(match[1], "%d", &n)
+			if n > max {
+				max = n
+			}
 		}
+	} else if !os.IsNotExist(err) {
 		return 0, err
 	}
-	re := regexp.MustCompile(`sprint-(\d+)\.md`)
-	max := 0
-	for _, entry := range entries {
-		match := re.FindStringSubmatch(entry.Name())
-		if match == nil {
-			continue
+
+	// Legacy .harness/contracts/sprint-NNN.md
+	contractsDir := filepath.Join(m.root, "contracts")
+	if entries, err := os.ReadDir(contractsDir); err == nil {
+		re := regexp.MustCompile(`sprint-(\d+)\.md$`)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			match := re.FindStringSubmatch(entry.Name())
+			if match == nil {
+				continue
+			}
+			var n int
+			fmt.Sscanf(match[1], "%d", &n)
+			if n > max {
+				max = n
+			}
 		}
-		var n int
-		fmt.Sscanf(match[1], "%d", &n)
-		if n > max {
-			max = n
-		}
+	} else if !os.IsNotExist(err) {
+		return 0, err
 	}
+
 	return max, nil
 }
 
@@ -239,7 +327,38 @@ func (m *Manager) Propose(sprintNumber int) (Status, error) {
 	if err := m.writeLock(lock); err != nil {
 		return Status{}, err
 	}
+	m.seedTraceability(sprintNumber, contract)
 	return m.refreshLockState(sprintNumber)
+}
+
+// seedTraceability creates Pending entries in the traceability ledger
+// for every REQ-NNN declared in the contract. Status transitions to
+// In Design / In Tasks happen as the matching artifact appears; this
+// seeding ensures the ledger is never empty after a first Propose.
+func (m *Manager) seedTraceability(sprintNumber int, contract *planner.Contract) {
+	if contract == nil || len(contract.Requirements) == 0 {
+		return
+	}
+	reqs := make([]traceability.Requirement, 0, len(contract.Requirements))
+	for _, r := range contract.Requirements {
+		reqs = append(reqs, traceability.Requirement{ID: r.ID, Statement: r.Statement})
+	}
+	slug := featureSlug(sprintNumber)
+	_ = traceability.BulkRegister(m.root, slug, reqs)
+	presence := m.artifactPresence(sprintNumber)
+	next := traceability.StatusPending
+	if presence.HasDesign {
+		next = traceability.StatusInDesign
+	}
+	if presence.HasTasks {
+		next = traceability.StatusInTasks
+	}
+	if next == traceability.StatusPending {
+		return
+	}
+	for _, r := range contract.Requirements {
+		_, _, _ = traceability.Update(m.root, slug, r.ID, r.Statement, next)
+	}
 }
 
 func (m *Manager) Approve(sprintNumber int, role string) (Status, error) {
@@ -274,21 +393,64 @@ func (m *Manager) artifactPresence(sprintNumber int) planning.ArtifactPresence {
 	if _, err := os.Stat(m.DesignPath(sprintNumber)); err == nil {
 		presence.HasDesign = true
 	}
-	if _, err := os.Stat(m.TasksPath(sprintNumber)); err == nil {
+	tasksPath := m.TasksPath(sprintNumber)
+	if _, err := os.Stat(tasksPath); err == nil {
 		presence.HasTasks = true
+		presence.TaskPlanPath = tasksPath
+	}
+	// TESTING.md lives in the codebase mapping tree, not under a
+	// per-feature directory. Both layouts are tried so legacy projects
+	// keep their .harness/context/TESTING.md until they migrate.
+	for _, candidate := range []string{
+		filepath.Join(m.specsRoot, "codebase", "TESTING.md"),
+		filepath.Join(m.root, "context", "TESTING.md"),
+	} {
+		if _, err := os.Stat(candidate); err == nil {
+			presence.TestingMatrixPath = candidate
+			break
+		}
 	}
 	return presence
 }
 
 func (m *Manager) ContractPath(sprintNumber int) string {
-	return filepath.Join(m.root, "contracts", fmt.Sprintf("sprint-%03d.md", sprintNumber))
+	return m.resolveArtifact(sprintNumber, "spec.md", "contracts")
 }
 
 func (m *Manager) DesignPath(sprintNumber int) string {
-	return filepath.Join(m.root, "design", fmt.Sprintf("sprint-%03d.md", sprintNumber))
+	return m.resolveArtifact(sprintNumber, "design.md", "design")
 }
 
 func (m *Manager) TasksPath(sprintNumber int) string {
+	return m.resolveArtifact(sprintNumber, "tasks.md", "tasks")
+}
+
+// CanonicalContractPath returns the .specs/ path regardless of whether
+// the artifact has been migrated yet. New contracts (`harness sprint new`)
+// write here; migration moves legacy files to this path.
+func (m *Manager) CanonicalContractPath(sprintNumber int) string {
+	return filepath.Join(m.featureDir(sprintNumber), "spec.md")
+}
+
+func (m *Manager) CanonicalDesignPath(sprintNumber int) string {
+	return filepath.Join(m.featureDir(sprintNumber), "design.md")
+}
+
+func (m *Manager) CanonicalTasksPath(sprintNumber int) string {
+	return filepath.Join(m.featureDir(sprintNumber), "tasks.md")
+}
+
+// LegacyContractPath returns the pre-Phase-2 location. Migration code
+// reads from here and writes to CanonicalContractPath.
+func (m *Manager) LegacyContractPath(sprintNumber int) string {
+	return filepath.Join(m.root, "contracts", fmt.Sprintf("sprint-%03d.md", sprintNumber))
+}
+
+func (m *Manager) LegacyDesignPath(sprintNumber int) string {
+	return filepath.Join(m.root, "design", fmt.Sprintf("sprint-%03d.md", sprintNumber))
+}
+
+func (m *Manager) LegacyTasksPath(sprintNumber int) string {
 	return filepath.Join(m.root, "tasks", fmt.Sprintf("sprint-%03d.md", sprintNumber))
 }
 
@@ -360,7 +522,36 @@ func (m *Manager) refreshLockState(sprintNumber int) (Status, error) {
 	if err := m.writeLock(lock); err != nil {
 		return Status{}, err
 	}
-	return m.Status(sprintNumber)
+	final, err := m.Status(sprintNumber)
+	if err != nil {
+		return Status{}, err
+	}
+	if final.State == "agreed" {
+		m.advanceTraceability(sprintNumber, traceability.StatusImplementing)
+	}
+	return final, nil
+}
+
+// advanceTraceability transitions every requirement of the given
+// sprint to the supplied status. Best-effort — errors are swallowed so
+// the ledger never blocks the agreement pipeline.
+func (m *Manager) advanceTraceability(sprintNumber int, next traceability.Status) {
+	_, contract, _, err := m.contractHash(sprintNumber)
+	if err != nil || contract == nil {
+		return
+	}
+	slug := featureSlug(sprintNumber)
+	for _, r := range contract.Requirements {
+		_, _, _ = traceability.Update(m.root, slug, r.ID, r.Statement, next)
+	}
+}
+
+// AdvanceTraceabilityTo is the public hook that sprint.Consolidate uses
+// to mark every requirement of the sprint Verified after a passing
+// QA score. Wraps advanceTraceability so callers outside this package
+// can drive the ledger without needing access to internals.
+func (m *Manager) AdvanceTraceabilityTo(sprintNumber int, status traceability.Status) {
+	m.advanceTraceability(sprintNumber, status)
 }
 
 // contractHash computes the hash that defines an agreed sprint state.

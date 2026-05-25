@@ -42,6 +42,29 @@ func TestInspectSumsKnownFiles(t *testing.T) {
 	}
 }
 
+func TestInspectSumsCanonicalSpecsFiles(t *testing.T) {
+	harnessDir := t.TempDir()
+	specsRoot := filepath.Join(filepath.Dir(harnessDir), ".specs")
+	mkfile(t, filepath.Join(specsRoot, "project", "PROJECT.md"), 1000)
+	mkfile(t, filepath.Join(specsRoot, "project", "STATE.md"), 2000)
+	mkfile(t, filepath.Join(specsRoot, "codebase", "STACK.md"), 300)
+	mkfile(t, filepath.Join(specsRoot, "features", "sprint-001", "spec.md"), 1500)
+	mkfile(t, filepath.Join(specsRoot, "features", "sprint-001", "design.md"), 700)
+	mkfile(t, filepath.Join(specsRoot, "features", "sprint-001", "tasks.md"), 500)
+
+	snap, err := Inspect(harnessDir, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantBytes := int64(1000 + 2000 + 300 + 1500 + 700 + 500)
+	if snap.TotalBytes != wantBytes {
+		t.Fatalf("expected total bytes %d, got %d", wantBytes, snap.TotalBytes)
+	}
+	if len(snap.Files) != 6 {
+		t.Fatalf("expected 6 files counted, got %d", len(snap.Files))
+	}
+}
+
 func TestInspectIgnoresMissingSprintArtifacts(t *testing.T) {
 	harnessDir := t.TempDir()
 	mkfile(t, filepath.Join(harnessDir, "spec.md"), 500)

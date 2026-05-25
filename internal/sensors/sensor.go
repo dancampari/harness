@@ -150,14 +150,18 @@ func (r *Registry) Available(root string) []Sensor {
 // Adding a new fast sensor: extend this map. Slow sensors do not need
 // to declare anything; the default is slow.
 var fastSensorNames = map[string]bool{
-	"eslint":          true,
-	"ruff":            true,
-	"mypy":            true,
-	"go-vet":          true,
-	"staticcheck":     true,
-	"clippy":          true,
-	"js-architecture": true,
-	"js-complexity":   true,
+	"eslint":                 true,
+	"ruff":                   true,
+	"mypy":                   true,
+	"go-vet":                 true,
+	"staticcheck":            true,
+	"clippy":                 true,
+	"js-architecture":        true,
+	"js-complexity":          true,
+	"spec-deviation-scanner": true,
+	"scope-creep":            true,
+	"tdd-violation":          true,
+	"test-count-tracker":     true,
 }
 
 // IsFast reports whether the sensor with the given name is safe to run

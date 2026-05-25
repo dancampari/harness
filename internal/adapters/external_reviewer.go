@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dancampari/harness/internal/agreement"
 	"github.com/dancampari/harness/internal/config"
 	"github.com/dancampari/harness/internal/sensors"
 )
@@ -211,24 +212,12 @@ func (ExternalReviewer) Run(ctx context.Context, root string) sensors.Result {
 // or empty values when there is no sprint contract yet (in which case
 // the reviewer is expected to do general project review).
 func activeContract(harnessDir string) (string, string) {
-	dir := filepath.Join(harnessDir, "contracts")
-	entries, err := readDirSafe(dir)
-	if err != nil {
+	mgr := agreement.NewManager(harnessDir)
+	number, err := mgr.CurrentSprintNumber()
+	if err != nil || number == 0 {
 		return "", ""
 	}
-	latest := ""
-	for _, name := range entries {
-		if !strings.HasPrefix(name, "sprint-") || !strings.HasSuffix(name, ".md") {
-			continue
-		}
-		if name > latest {
-			latest = name
-		}
-	}
-	if latest == "" {
-		return "", ""
-	}
-	path := filepath.Join(dir, latest)
+	path := mgr.ContractPath(number)
 	body, err := readFileSafe(path)
 	if err != nil {
 		return "", ""

@@ -220,9 +220,11 @@ func TestProposeAcceptsCompliantSpecDrivenContract(t *testing.T) {
 		"## Requirements\n- REQ-001: Ship the feature.\n\n" +
 		"## Deliverables\n- `index.js` (REQ-001)\n\n" +
 		"## Acceptance Criteria\n" +
-		"| # | REQ     | Criterion   | Evidence       | Threshold |\n" +
-		"|---|---------|-------------|----------------|-----------|\n" +
-		"| 1 | REQ-001 | Works fine  | tests:works    | 8/10      |\n"
+		"| # | REQ     | Criterion                                                              | Evidence    | Threshold |\n" +
+		"|---|---------|------------------------------------------------------------------------|-------------|-----------|\n" +
+		"| 1 | REQ-001 | WHEN the agent runs build THEN the system SHALL emit index.js          | tests:works | 8/10      |\n\n" +
+		"## Edge Cases\n- empty input\n\n" +
+		"## Out of Scope\n- documentation site\n"
 	if err := os.WriteFile(contractPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

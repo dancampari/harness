@@ -1,6 +1,6 @@
 {
   "name": "@dancampari/harness",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Stack-agnostic local QA harness for AI-assisted development.",
   "license": "MIT",
   "type": "commonjs",
@@ -10,13 +10,15 @@
   "scripts": {
     "postinstall": "node npm/install.js",
     "test": "go test ./...",
-    "build": "go build -o dist/harness ."
+    "build": "node scripts/build-dist.js",
+    "smoke:package": "node scripts/practical-smoke.js"
   },
   "files": [
     "cmd",
     "docs",
     "internal",
     "npm",
+    "scripts",
     "main.go",
     "go.mod",
     "go.sum",

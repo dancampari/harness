@@ -100,7 +100,7 @@ func TestDoctorStrictFailsOnStaleInstalledSkills(t *testing.T) {
 	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
 	writeDoctorFile(t, root, ".harness/.gitignore", generatedHarnessIgnoreForTest)
 	writeDoctorFile(t, root, ".harness/setup.json", `{"contract_skills_enabled":true}`)
-	writeDoctorFile(t, root, ".harness/skills/contract-authoring/SKILL.md", "old skill without repair loop\n")
+	writeDoctorFile(t, root, ".harness/skills/harness-gate/SKILL.md", "stale gate skill missing required sections\n")
 
 	err := runDoctorWithOptions(root, doctorOptions{Strict: true})
 	if err == nil || !strings.Contains(err.Error(), "doctor strict failed") {
@@ -129,7 +129,8 @@ func TestDoctorStrictFailsOnStaleSpecDrivenSkill(t *testing.T) {
 	writeDoctorFile(t, root, ".harness/agent-protocol.md", "harness.repair\nsprint repair\n")
 	writeDoctorFile(t, root, ".harness/.gitignore", generatedHarnessIgnoreForTest)
 	writeDoctorFile(t, root, ".harness/setup.json", `{"planning_mode":"spec-driven","contract_skills_enabled":true,"coding_cli":"none"}`)
-	writeDoctorFile(t, root, ".harness/skills/spec-driven/SKILL.md", "old skill\n")
+	writeDoctorFile(t, root, ".harness/skills/tlc-spec-driven/SKILL.md", "old skill missing phases\n")
+	writeDoctorFile(t, root, ".harness/skills/harness-gate/SKILL.md", "old gate skill missing required sections\n")
 
 	err := runDoctorWithOptions(root, doctorOptions{Strict: true})
 	if err == nil || !strings.Contains(err.Error(), "doctor strict failed") {

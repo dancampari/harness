@@ -35,6 +35,10 @@ func BuildRegistry() *sensors.Registry {
 	r.Register(CargoTest{})
 	r.Register(CargoAudit{})
 	r.Register(Semgrep{})
-	r.Register(ExternalReviewer{}) // optional; reads its config from .harness/config.yaml at Run time
+	r.Register(SpecDeviationScanner{}) // TLC implement.md gate
+	r.Register(ScopeCreep{})           // TLC implement.md scope guardrail
+	r.Register(TDDViolation{})         // TLC implement.md tests-first gate
+	r.Register(TestCountTracker{})     // TLC implement.md test-count regression gate
+	r.Register(ExternalReviewer{})     // optional; reads its config from .harness/config.yaml at Run time
 	return r
 }

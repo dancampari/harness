@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dancampari/harness/internal/agreement"
 	"github.com/dancampari/harness/internal/detect"
 	"github.com/dancampari/harness/internal/sensors"
 )
@@ -146,31 +147,25 @@ func resolveImport(root, fromDir, spec string, fileSet map[string]bool) (string,
 }
 
 func readForbiddenImportRules(root string) []forbiddenImportRule {
-	contractsDir := filepath.Join(root, ".harness", "contracts")
-	entries, err := os.ReadDir(contractsDir)
+	mgr := agreement.NewManager(filepath.Join(root, ".harness"))
+	number, err := mgr.CurrentSprintNumber()
+	if err != nil || number == 0 {
+		return nil
+	}
+	path := mgr.ContractPath(number)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() > entries[j].Name() })
 	rulePattern := regexp.MustCompile("forbidden_imports?:\\s*`([^`]+)`")
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
+	var rules []forbiddenImportRule
+	for _, match := range rulePattern.FindAllStringSubmatch(string(b), -1) {
+		parts := splitForbiddenRule(match[1])
+		if len(parts) == 2 {
+			rules = append(rules, forbiddenImportRule{From: parts[0], To: parts[1]})
 		}
-		b, err := os.ReadFile(filepath.Join(contractsDir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		var rules []forbiddenImportRule
-		for _, match := range rulePattern.FindAllStringSubmatch(string(b), -1) {
-			parts := splitForbiddenRule(match[1])
-			if len(parts) == 2 {
-				rules = append(rules, forbiddenImportRule{From: parts[0], To: parts[1]})
-			}
-		}
-		return rules
 	}
-	return nil
+	return rules
 }
 
 func splitForbiddenRule(rule string) []string {

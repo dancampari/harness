@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,8 +26,8 @@ func TestE2ESetupInstallsSpecDrivenAutomationForAllCLIs(t *testing.T) {
 		needles []string
 	}{
 		{".harness/agent-protocol.md", []string{"harness.doctor_fix", "doctor --fix", "sprint repair", "Spec-driven automation"}},
-		{".harness/skills/spec-driven/SKILL.md", []string{"Specify", "Design", "Tasks", "Execute", "Validate"}},
-		{".harness/skills/contract-authoring/SKILL.md", []string{"harness doctor --fix", "Do not implement until"}},
+		{".harness/skills/tlc-spec-driven/SKILL.md", []string{"Specify", "Design", "Tasks", "Execute"}},
+		{".harness/skills/harness-gate/SKILL.md", []string{"Agreement gate", "QA dimensions", "Events log"}},
 		{"AGENTS.md", []string{"harness.doctor_fix", "harness_contract_reviewer", "harness_task_worker"}},
 		{filepath.Join(".codex", "agents", "harness-task-worker.toml"), []string{"harness_task_worker", "harness doctor --fix", "AGREED"}},
 		{"CLAUDE.md", []string{"harness.doctor_fix", "harness-contract-reviewer", "harness-task-worker"}},
@@ -40,6 +41,80 @@ func TestE2ESetupInstallsSpecDrivenAutomationForAllCLIs(t *testing.T) {
 
 	doctor := runHarness(t, exe, root, "doctor", "--fix")
 	assertContains(t, string(doctor), "Auto-fix:")
+}
+
+func TestE2ESetupLocalBinaryRunsAgreedFeatureThroughScore(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+
+	runHarness(t, exe, root, "setup", "--yes", "--cli", "none", "--planning", "spec-driven", "--scope", "project")
+	localExe := filepath.Join(root, ".harness", "bin", executableNameForTest("harness"))
+	assertFileExists(t, localExe)
+
+	runHarness(t, localExe, root, "feature", "new", "active local binary")
+	writeIntegrationFile(t, filepath.Join(root, ".specs", "features", "sprint-001", "spec.md"), `# Sprint 001 - Active Local Binary
+
+## Goal
+Validate that the project-local Harness binary can drive an agreed feature through QA and score. This is the installed-binary path agents use after setup.
+
+## Size
+small
+
+## Requirements
+- REQ-001: The local Harness binary can complete the full agreement and QA lifecycle.
+
+## Deliverables
+- `+"`README.md`"+` (REQ-001)
+
+## Acceptance Criteria
+| # | REQ     | Criterion                                                                        | Evidence      | Threshold |
+|---|---------|----------------------------------------------------------------------------------|---------------|-----------|
+| 1 | REQ-001 | WHEN README.md exists THEN the system SHALL satisfy the agreed feature contract   | e2e:README.md | 8/10      |
+
+## Edge Cases
+- Fresh project with no previous feature reports.
+
+## Out of Scope
+- Exercising stack-specific tool adapters.
+
+## Constraints
+- coverage_min: 0
+`)
+	runHarness(t, localExe, root, "feature", "propose")
+	runHarness(t, localExe, root, "feature", "approve", "--role", "planner")
+	runHarness(t, localExe, root, "feature", "approve", "--role", "tester")
+	writeIntegrationFile(t, filepath.Join(root, "README.md"), "# Active Local Binary\n")
+
+	qa := runHarness(t, localExe, root, "feature", "qa", "--format", "json")
+	var result struct {
+		Verdict    string `json:"verdict"`
+		TotalScore int    `json:"total_score"`
+		Dimensions map[string]struct {
+			Score       int      `json:"score"`
+			Passed      bool     `json:"passed"`
+			SensorsUsed []string `json:"sensors_used"`
+		} `json:"dimensions"`
+	}
+	if err := json.Unmarshal(qa, &result); err != nil {
+		t.Fatalf("parse local-binary QA result: %v\n%s", err, qa)
+	}
+	if result.Verdict != "PASS" || result.TotalScore != 100 {
+		t.Fatalf("expected PASS 100 from local binary, got %+v\n%s", result, qa)
+	}
+	contract := result.Dimensions["contract"]
+	if !contract.Passed || contract.Score != 100 {
+		t.Fatalf("expected passing contract dimension, got %+v", contract)
+	}
+	for _, sensor := range []string{"spec-deviation-scanner", "test-count-tracker", "contract-validator"} {
+		if !containsString(contract.SensorsUsed, sensor) {
+			t.Fatalf("expected contract sensor %s in %+v", sensor, contract.SensorsUsed)
+		}
+	}
+
+	score := runHarness(t, localExe, root, "feature", "score")
+	assertContains(t, string(score), "Sprint 001 scored")
+	assertFileContains(t, filepath.Join(root, ".harness", "reports", "sprint-001.json"), `"verdict": "PASS"`)
+	assertFileContains(t, filepath.Join(root, ".specs", "project", "STATE.md"), "Sprint 001")
 }
 
 func TestE2EGuardBlocksProductWritesUntilContractAgreement(t *testing.T) {
@@ -143,13 +218,63 @@ func TestE2EContractLifecycleProducesCurrentReportsAndProgress(t *testing.T) {
 
 	score := runHarness(t, exe, root, "sprint", "score")
 	assertContains(t, string(score), "Sprint 001 scored")
-	assertFileContains(t, filepath.Join(root, ".harness", "progress.md"), "Sprint 001")
+	assertFileContains(t, filepath.Join(root, ".specs", "project", "STATE.md"), "Sprint 001")
 	assertContains(t, string(runHarness(t, exe, root, "sprint", "status")), "QA=pass")
 	assertContains(t, string(runHarness(t, exe, root, "sprint", "list")), "PASS")
 	assertContains(t, string(runHarness(t, exe, root, "progress")), "Sprint 001")
 	assertContains(t, string(runHarness(t, exe, root, "spec")), "Product Specification")
 	assertContains(t, string(runHarness(t, exe, root, "trend")), "Score trend")
 	assertContains(t, string(runHarness(t, exe, root, "sprint", "repair")), "No repair required")
+}
+
+func TestE2ESpecDeviationWithoutReasonBlocksQA(t *testing.T) {
+	exe := buildHarness(t)
+	root := t.TempDir()
+
+	runHarness(t, exe, root, "init", "--cli", "none", "--planning", "manual")
+	runHarness(t, exe, root, "feature", "new", "blocking spec deviation")
+	writeIntegrationFile(t, filepath.Join(root, ".specs", "features", "sprint-001", "spec.md"), `# Sprint 001 - Blocking Spec Deviation
+
+## Goal
+Prove orphan SPEC_DEVIATION markers cannot pass the contract gate.
+
+## Deliverables
+- `+"`README.md`"+`
+
+## Acceptance Criteria
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | README exists | 8/10 |
+`)
+	runHarness(t, exe, root, "feature", "propose")
+	runHarness(t, exe, root, "feature", "approve", "--role", "planner")
+	runHarness(t, exe, root, "feature", "approve", "--role", "tester")
+	writeIntegrationFile(t, filepath.Join(root, "README.md"), "# Deviation\n")
+	writeIntegrationFile(t, filepath.Join(root, "main.go"), "package main\n\n// SPEC_DEVIATION\nfunc main() {}\n")
+
+	qa := runHarness(t, exe, root, "feature", "qa", "--format", "json")
+	var result struct {
+		Verdict    string `json:"verdict"`
+		Dimensions map[string]struct {
+			Score    int `json:"score"`
+			Findings []struct {
+				Rule string `json:"rule"`
+			} `json:"findings"`
+		} `json:"dimensions"`
+	}
+	if err := json.Unmarshal(qa, &result); err != nil {
+		t.Fatalf("parse QA result: %v\n%s", err, qa)
+	}
+	if result.Verdict != "FAIL" {
+		t.Fatalf("expected blocking SPEC_DEVIATION to fail QA, got %s\n%s", result.Verdict, qa)
+	}
+	contract := result.Dimensions["contract"]
+	if contract.Score != 0 {
+		t.Fatalf("expected contract score 0, got %+v", contract)
+	}
+	if !hasFindingRule(contract.Findings, "spec-deviation-without-reason") {
+		t.Fatalf("expected spec-deviation finding, got %+v", contract.Findings)
+	}
 }
 
 func TestE2EPreCommitHookBlocksFastFail(t *testing.T) {
@@ -605,11 +730,17 @@ func runHarnessEnv(t *testing.T, exe, dir string, env []string, args ...string) 
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = dir
 	cmd.Env = env
-	out, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdout, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("harness %s failed: %v\n%s", strings.Join(args, " "), err, out)
+		t.Fatalf("harness %s failed: %v\nstdout:\n%s\nstderr:\n%s",
+			strings.Join(args, " "), err, stdout, stderr.String())
 	}
-	return out
+	if stderr.Len() > 0 {
+		t.Logf("harness %s stderr:\n%s", strings.Join(args, " "), stderr.String())
+	}
+	return stdout
 }
 
 func runGuard(t *testing.T, exe, dir string, payload map[string]any) string {
@@ -647,6 +778,26 @@ func sensorExecuted(statuses []struct {
 }, name string) bool {
 	for _, status := range statuses {
 		if status.Name == name && status.Executed {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func hasFindingRule(findings []struct {
+	Rule string `json:"rule"`
+}, rule string) bool {
+	for _, finding := range findings {
+		if finding.Rule == rule {
 			return true
 		}
 	}

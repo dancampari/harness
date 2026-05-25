@@ -3,10 +3,10 @@
 // Each sprint advances through four states, recorded in memory.db and
 // surfaced via the TUI:
 //
-//	Contract:  user/CLI writes contracts/sprint-NNN.md
+//	Contract:  user/CLI writes .specs/features/sprint-NNN/spec.md
 //	Build:     CLI implements the feature (harness has no role here)
 //	QA:        Evaluator subprocess runs sensors, emits evaluations/sprint-NNN.md
-//	Score:     Manager consolidates, writes report, appends to progress.md
+//	Score:     Manager consolidates, writes report, appends to .specs/project/STATE.md
 //
 // The Manager is the orchestrator. Sensors live in /internal/adapters,
 // the evaluation logic in /internal/evaluator, and persistent memory
@@ -34,6 +34,7 @@ import (
 	"github.com/dancampari/harness/internal/planner"
 	"github.com/dancampari/harness/internal/progress"
 	"github.com/dancampari/harness/internal/sensors"
+	"github.com/dancampari/harness/internal/traceability"
 	"github.com/dancampari/harness/internal/workspace"
 )
 
@@ -75,12 +76,20 @@ func (m *Manager) Close() error {
 
 // NewContract creates the next sprint contract from a goal.
 // Returns the file path and the assigned sprint number.
+//
+// New contracts are written under .specs/features/sprint-NNN/spec.md
+// (TLC's canonical location). Legacy projects continue to read existing
+// contracts from .harness/contracts/ via agreement.Manager's dual-layout
+// resolver until `harness upgrade` migrates them.
 func (m *Manager) NewContract(goal string) (string, int, error) {
 	next, err := m.nextSprintNumber()
 	if err != nil {
 		return "", 0, err
 	}
-	path := filepath.Join(m.root, "contracts", fmt.Sprintf("sprint-%03d.md", next))
+	path := agreement.NewManager(m.root).CanonicalContractPath(next)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", 0, err
+	}
 	if err := os.WriteFile(path, []byte(planner.Template(next, goal)), 0o644); err != nil {
 		return "", 0, err
 	}
@@ -106,10 +115,11 @@ func (m *Manager) Status() (Status, error) {
 	}
 	st := Status{Number: n, Contract: "missing", Build: "pending", QA: "pending", Score: "-"}
 	var ag agreement.Status
-	cpath := filepath.Join(m.root, "contracts", fmt.Sprintf("sprint-%03d.md", n))
+	agMgr := agreement.NewManager(m.root)
+	cpath := agMgr.ContractPath(n)
 	if c, err := planner.Parse(cpath); err == nil {
 		st.Goal = c.Title
-		if agStatus, err := agreement.NewManager(m.root).Status(n); err == nil {
+		if agStatus, err := agMgr.Status(n); err == nil {
 			ag = agStatus
 			st.Contract = ag.State
 		}
@@ -270,7 +280,7 @@ func (m *Manager) RunQAInternalWith(stdout io.Writer, opts QAOptions) error {
 	if err != nil {
 		return err
 	}
-	cpath := filepath.Join(m.root, "contracts", fmt.Sprintf("sprint-%03d.md", n))
+	cpath := agreement.NewManager(m.root).ContractPath(n)
 	contract, err := planner.Parse(cpath)
 	if err != nil {
 		return fmt.Errorf("parse contract: %w", err)
@@ -442,7 +452,7 @@ func isolatedEvaluatorPath(repoRoot, current string) string {
 }
 
 // Consolidate finalizes the sprint: writes the score, appends to
-// progress.md, records the run in memory.db. Called after RunQA.
+// STATE.md, records the run in memory.db. Called after RunQA.
 func (m *Manager) Consolidate(allowFail bool) (*ConsolidatedReport, error) {
 	n, err := m.currentSprintNumber()
 	if err != nil {
@@ -511,9 +521,16 @@ func (m *Manager) Consolidate(allowFail bool) (*ConsolidatedReport, error) {
 		}
 	}
 
-	// Append to progress.md (the narrative brain).
+	// Append to STATE.md (the narrative brain).
 	if err := m.appendProgress(n, &ev); err != nil {
 		return nil, err
+	}
+
+	// Mark every requirement Verified in the traceability ledger so
+	// the live TUI and trend tooling see closure. Best-effort: a
+	// missing ledger or a transient I/O error must not block scoring.
+	if ev.Verdict == "PASS" {
+		agreement.NewManager(m.root).AdvanceTraceabilityTo(n, traceability.StatusVerified)
 	}
 
 	return &ConsolidatedReport{
@@ -577,9 +594,7 @@ func (m *Manager) List() ([]SprintListItem, error) {
 			continue
 		}
 		goal := ""
-		cpath := filepath.Join(m.root, "contracts",
-			strings.Replace(e.Name(), ".json", ".md", 1))
-		if c, err := planner.Parse(cpath); err == nil {
+		if c, err := planner.Parse(agreement.NewManager(m.root).ContractPath(ev.SprintNumber)); err == nil {
 			goal = c.Title
 		}
 		out = append(out, SprintListItem{
@@ -607,29 +622,10 @@ func (m *Manager) nextSprintNumber() (int, error) {
 }
 
 // currentSprintNumber returns the highest existing sprint number, or 0.
+// Delegates to agreement.Manager so the same dual-layout (.specs/ canonical
+// + .harness/contracts legacy) scan is shared.
 func (m *Manager) currentSprintNumber() (int, error) {
-	dir := filepath.Join(m.root, "contracts")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, err
-	}
-	re := regexp.MustCompile(`sprint-(\d+)\.md`)
-	max := 0
-	for _, e := range entries {
-		m := re.FindStringSubmatch(e.Name())
-		if m == nil {
-			continue
-		}
-		var n int
-		fmt.Sscanf(m[1], "%d", &n)
-		if n > max {
-			max = n
-		}
-	}
-	return max, nil
+	return agreement.NewManager(m.root).CurrentSprintNumber()
 }
 
 func (m *Manager) writeEvaluationMarkdown(n int, c *planner.Contract,
@@ -713,7 +709,10 @@ func (m *Manager) writeJSONReport(n int, r *evaluator.EvaluationResult) error {
 }
 
 func (m *Manager) appendProgress(n int, r *evaluator.EvaluationResult) error {
-	path := filepath.Join(m.root, "progress.md")
+	path := projectStatePath(m.root)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
 		return err
@@ -738,6 +737,15 @@ func (m *Manager) appendProgress(n int, r *evaluator.EvaluationResult) error {
 		fmt.Fprintf(f, "- Failed dimensions: %s\n", strings.Join(failedDims, ", "))
 	}
 	return nil
+}
+
+func projectStatePath(harnessDir string) string {
+	clean := filepath.Clean(harnessDir)
+	parent := filepath.Dir(clean)
+	if parent == "" || parent == "." {
+		return filepath.Join(".specs", "project", "STATE.md")
+	}
+	return filepath.Join(parent, ".specs", "project", "STATE.md")
 }
 
 func (m *Manager) writeRepairBriefFromResult(n int, r *evaluator.EvaluationResult) (*RepairBrief, error) {

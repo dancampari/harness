@@ -388,20 +388,18 @@ func firstPositive(values ...int) int {
 }
 
 func loadLegacyRuns(harnessDir string) []RunRecord {
-	contractsDir := filepath.Join(harnessDir, "contracts")
-	entries, err := os.ReadDir(contractsDir)
-	if err != nil {
+	agMgr := agreement.NewManager(harnessDir)
+	latest, err := agMgr.CurrentSprintNumber()
+	if err != nil || latest == 0 {
 		return nil
 	}
-	progress := readOptionalFile(filepath.Join(harnessDir, "progress.md"))
+	progress := readProjectState(harnessDir)
 	var runs []RunRecord
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "sprint-") || !strings.HasSuffix(entry.Name(), ".md") {
+	for number := 1; number <= latest; number++ {
+		contractPath := agMgr.ContractPath(number)
+		if !fileExists(contractPath) {
 			continue
 		}
-		var number int
-		fmt.Sscanf(entry.Name(), "sprint-%d.md", &number)
-		contractPath := filepath.Join(contractsDir, entry.Name())
 		feature := fmt.Sprintf("Sprint %03d", number)
 		if contract, err := planner.Parse(contractPath); err == nil && contract.Title != "" {
 			feature = contract.Title
@@ -430,7 +428,7 @@ func loadLegacyRuns(harnessDir string) []RunRecord {
 		if info, err := os.Stat(contractPath); err == nil {
 			run.StartedAt = info.ModTime()
 		}
-		ag, _ := agreement.NewManager(harnessDir).Status(number)
+		ag, _ := agMgr.Status(number)
 		if ag.State != "" {
 			run.Validations["contract"] = ag.State
 		}
@@ -648,7 +646,7 @@ func legacyEventsFromState(harnessDir string, current RunRecord) []ActivityEvent
 			}
 		}
 	}
-	progress := readOptionalFile(filepath.Join(harnessDir, "progress.md"))
+	progress := readProjectState(harnessDir)
 	lines := cleanLines(strings.Split(progress, "\n"))
 	if len(lines) > 0 {
 		if len(lines) > 6 {
@@ -764,8 +762,11 @@ func packageScripts(projectRoot string) []string {
 }
 
 func importantFiles(projectRoot, harnessDir string) []string {
+	specsRoot := specsRootForHarness(harnessDir)
 	checks := []string{
 		filepath.Join(harnessDir, "config.yaml"),
+		filepath.Join(specsRoot, "project", "PROJECT.md"),
+		filepath.Join(specsRoot, "project", "STATE.md"),
 		filepath.Join(harnessDir, "spec.md"),
 		filepath.Join(harnessDir, "progress.md"),
 		filepath.Join(harnessDir, "agent-protocol.md"),
@@ -926,8 +927,11 @@ func watchedArtifacts(root string) []watchedArtifact {
 	}
 	addFile("current-run.json", "run updated")
 	addFile("config.yaml", "config updated")
+	addFile(filepath.Join("..", ".specs", "project", "PROJECT.md"), "spec updated")
+	addFile(filepath.Join("..", ".specs", "project", "STATE.md"), "state updated")
 	addFile("spec.md", "spec updated")
 	addFile("progress.md", "progress scored")
+	addDirRecursive(filepath.Join("..", ".specs", "features"), "feature updated")
 	addDir("contracts", "contract updated")
 	addDir("evaluations", "evaluation updated")
 	addDir("reports", "qa report updated")
@@ -983,6 +987,23 @@ func readOptionalFile(path string) string {
 		return ""
 	}
 	return string(b)
+}
+
+func readProjectState(harnessDir string) string {
+	specsRoot := specsRootForHarness(harnessDir)
+	if body := readOptionalFile(filepath.Join(specsRoot, "project", "STATE.md")); body != "" {
+		return body
+	}
+	return readOptionalFile(filepath.Join(harnessDir, "progress.md"))
+}
+
+func specsRootForHarness(harnessDir string) string {
+	clean := filepath.Clean(harnessDir)
+	parent := filepath.Dir(clean)
+	if parent == "" || parent == "." {
+		return ".specs"
+	}
+	return filepath.Join(parent, ".specs")
 }
 
 func readJSONFile(path string, v any) error {

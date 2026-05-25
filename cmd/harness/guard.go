@@ -164,7 +164,7 @@ func hookCommandText(hook preToolHookInput) string {
 
 func denyPreAgreementWrite(output io.Writer, tool, projectRoot, target string, st agreement.Status) error {
 	reason := fmt.Sprintf(
-		"Harness blocked %s on %s because sprint %03d contract is %s. Do not edit product files before planner/tester agreement. Repair .harness/contracts/sprint-%03d.md, run `harness contract propose`, have planner and tester approve the same hash, then implement. If the tester rejected the contract, call the contract-authoring flow to rewrite it before changing code.",
+		"Harness blocked %s on %s because sprint %03d contract is %s. Do not edit product files before planner/tester agreement. Repair .specs/features/sprint-%03d/spec.md, run `harness contract propose`, have planner and tester approve the same hash, then implement. If the tester rejected the contract, repair the spec before changing code.",
 		tool, displayHookPath(projectRoot, target), st.SprintNumber, strings.ToUpper(st.State), st.SprintNumber,
 	)
 	return writePreToolDeny(output, reason)
@@ -277,6 +277,7 @@ func isPreAgreementControlPath(projectRoot, target string) bool {
 	if rel == "" {
 		return false
 	}
+	rel = filepath.ToSlash(rel)
 	switch rel {
 	case "AGENTS.md", "CLAUDE.md":
 		return true
@@ -284,6 +285,12 @@ func isPreAgreementControlPath(projectRoot, target string) bool {
 		return true
 	}
 	if strings.HasPrefix(rel, ".harness/contracts/sprint-") && strings.HasSuffix(rel, ".md") {
+		return true
+	}
+	// Canonical TLC artifact tree: .specs/features/<slug>/{spec,design,tasks}.md
+	// plus .specs/project/ and .specs/codebase/ may be authored freely
+	// before agreement (they ARE the contract sources).
+	if strings.HasPrefix(rel, ".specs/") && strings.HasSuffix(rel, ".md") {
 		return true
 	}
 	if strings.HasPrefix(rel, ".harness/skills/") ||

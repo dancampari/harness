@@ -13,9 +13,16 @@ import (
 func newProgressCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "progress",
-		Short: "Print progress.md (the narrative brain)",
+		Short: "Print .specs/project/STATE.md (the narrative brain)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := os.ReadFile(filepath.Join(".harness", "progress.md"))
+			path := filepath.Join(".specs", "project", "STATE.md")
+			if _, err := os.Stat(path); err != nil {
+				legacy := filepath.Join(".harness", "progress.md")
+				if _, legacyErr := os.Stat(legacy); legacyErr == nil {
+					path = legacy
+				}
+			}
+			b, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}

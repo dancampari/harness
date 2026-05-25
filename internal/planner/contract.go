@@ -344,6 +344,55 @@ func (c *Contract) Validate() []string {
 	return errors
 }
 
+func TemplatePlaceholderErrors(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	angleRe := regexp.MustCompile(`(?s)<[^>]+>`)
+	placeholderHints := []string{
+		"expand", "small |", "optional", "required", "reference",
+		"first requirement", "second requirement", "observable",
+		"action", "input", "empty input", "network failure",
+		"concurrent edits", "not in this sprint", "note any",
+		"assumption", "path/to", "function",
+	}
+	for _, match := range angleRe.FindAllString(raw, -1) {
+		lower := strings.ToLower(match)
+		for _, hint := range placeholderHints {
+			if strings.Contains(lower, hint) {
+				add(match)
+				break
+			}
+		}
+	}
+	for _, token := range []string{
+		"`path/to/file.ts`",
+		"`path/to/another.ts`",
+		"`functionName`",
+		"`anotherFn`",
+		"feature-error-response",
+	} {
+		if strings.Contains(raw, token) {
+			add(token)
+		}
+	}
+	errs := make([]string, 0, len(out))
+	for _, placeholder := range out {
+		errs = append(errs, fmt.Sprintf("unresolved template placeholder %q", placeholder))
+	}
+	return errs
+}
+
 // CheckAgainstDiff verifies the contract is satisfied by the current
 // state of the working tree. This is the "Contract" dimension of the
 // evaluator: did the implementer actually deliver what was promised?
@@ -582,8 +631,8 @@ const contractTemplate = `# Sprint %03d — %s
 ## Size
 <small | medium | large. Sets the planning depth for this sprint.
 - small: ≤3 deliverables, no design/tasks file required.
-- medium: tasks plan in .harness/tasks/sprint-NNN.md is required.
-- large: both design (.harness/design/sprint-NNN.md) and tasks plans required.
+- medium: tasks plan in .specs/features/sprint-NNN/tasks.md is required.
+- large: both design (.specs/features/sprint-NNN/design.md) and tasks plans required.
 Default below; bump to medium/large when scope grows.>
 
 small
@@ -603,16 +652,30 @@ requirement. The reference is plain text; the parser picks it up.>
 - ` + "`path/to/another.ts`" + ` exports: ` + "`anotherFn`" + ` (REQ-002)
 
 ## Acceptance Criteria
-<the 5-column form enforces traceability and lets Harness mechanically
-verify evidence. Evidence kinds: tests:<name>, e2e:<path>, fixture:<name>,
-inspection:<note>. The legacy 3-column form below is still parsed for
-backwards compatibility.>
+<5-column form enforces traceability + mechanical evidence. Every
+criterion must be in TLC's WHEN/THEN/SHALL form so the precondition,
+action, and observable outcome are unambiguous. Evidence kinds:
+tests:<name>, e2e:<path>, fixture:<name>, inspection:<note>.>
 
-| # | REQ     | Criterion                                  | Evidence                              | Threshold |
-|---|---------|--------------------------------------------|---------------------------------------|-----------|
-| 1 | REQ-001 | <observable, verifiable statement>         | tests:functionName handles edge case  | 8/10      |
-| 2 | REQ-001 | <observable outcome from the user side>    | e2e:tests/e2e/feature.spec.ts         | 7/10      |
-| 3 | REQ-002 | <observable, verifiable statement>         | fixture:feature-error-response        | 9/10      |
+| # | REQ     | Criterion                                                                | Evidence                              | Threshold |
+|---|---------|--------------------------------------------------------------------------|---------------------------------------|-----------|
+| 1 | REQ-001 | WHEN <action> THEN the system SHALL <observable outcome>                 | tests:functionName handles edge case  | 8/10      |
+| 2 | REQ-001 | WHEN <user-side action> THEN the UI SHALL <observable outcome>           | e2e:tests/e2e/feature.spec.ts         | 7/10      |
+| 3 | REQ-002 | WHEN <input> THEN the system SHALL <observable outcome>                  | fixture:feature-error-response        | 9/10      |
+
+## Edge Cases
+<TLC-mandated section: list boundary and failure scenarios. Empty
+"none" is allowed only for trivial sprints.>
+
+- <empty input>
+- <network failure>
+- <concurrent edits>
+
+## Out of Scope
+<TLC-mandated section: deferred work made explicit so it does not
+silently leak into implementation.>
+
+- <not in this sprint>
 
 ## Constraints
 - forbidden_imports: ` + "`src/domain/* → src/ui/*`" + `

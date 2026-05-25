@@ -1,23 +1,35 @@
 # Harness
 
-Deterministic QA harness for teams using coding agents such as Codex, Claude
-Code, and Cursor.
+> **TLC is the methodology. The harness is the deterministic enforcement
+> layer that lets a coding agent be held to TLC's method.**
 
-Harness sits next to the coding agent and validates each sprint contract
-against the real repository state using independent sensors: lint, tests,
-coverage, dependency audit, complexity, architecture checks, Playwright E2E,
-and visual screenshot baselines.
+Harness sits next to a coding agent (Codex, Claude Code, Cursor) and turns
+TLC's [spec-driven skill](https://agent-skills.techleads.club/skills/tlc-spec-driven/)
+into binding gates: a hashed contract that planner + tester roles must both
+approve, stack-aware QA sensors (lint, tests, coverage, audit, complexity,
+architecture, Playwright E2E, screenshot baselines, SPEC_DEVIATION scanner,
+scope-creep guardrail), workspace-SHA pinning so a report cannot survive
+code drift, an isolated evaluator subprocess, and an edit guard that
+refuses product-file writes before AGREED.
 
-Harness is intentionally not an LLM reviewer. It does not call models, does not
-need API keys, and does not replace human product judgment. Its job is to make
-quality evidence visible and conservative.
+The harness vendors TLC verbatim inside the binary (`internal/skills/tlc/`)
+and installs it into `.harness/skills/tlc-spec-driven/`. The agent reads
+TLC; the harness validates that the agent followed it. What TLC describes
+in prose, the harness measures in code: hashes, validators, sensors,
+locks, the `.harness/events.jsonl` log, and the `.harness/run-progress.json`
+snapshot.
+
+The harness intentionally does not embed an LLM. It needs no API keys and
+makes no model calls — the optional inferential reviewer adapter is the
+single place where an external CLI may be shelled out to. Quality evidence
+is deterministic, conservative, and reproducible.
 
 ## Install With npx
 
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.9.1
+npx github:dancampari/harness#v0.10.0
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -56,12 +68,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.9.1 --yes
-npx github:dancampari/harness#v0.9.1 --cli codex --yes
-npx github:dancampari/harness#v0.9.1 --cli claude --yes
-npx github:dancampari/harness#v0.9.1 --cli cursor --yes
-npx github:dancampari/harness#v0.9.1 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.9.1 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.10.0 --yes
+npx github:dancampari/harness#v0.10.0 --cli codex --yes
+npx github:dancampari/harness#v0.10.0 --cli claude --yes
+npx github:dancampari/harness#v0.10.0 --cli cursor --yes
+npx github:dancampari/harness#v0.10.0 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.10.0 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -72,7 +84,7 @@ npx github:dancampari/harness#v0.9.1 --cli codex --planning manual --scope globa
 Use one command to refresh Harness in a project that already has `.harness/`:
 
 ```bash
-npx github:dancampari/harness#v0.9.1 upgrade --yes
+npx github:dancampari/harness#v0.10.0 upgrade --yes
 ```
 
 The upgrade command preserves project memory and history:
@@ -136,8 +148,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.9.1 --yes
-npx github:dancampari/harness#v0.9.1 sprint new "implement user auth"
+npx github:dancampari/harness#v0.10.0 --yes
+npx github:dancampari/harness#v0.10.0 feature new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -145,27 +157,27 @@ the sprint contract from the user's prompt. In manual mode, edit the generated
 contract yourself:
 
 ```text
-.harness/contracts/sprint-001.md
+.specs/features/sprint-001/spec.md
 ```
 
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.9.1 contract propose
-npx github:dancampari/harness#v0.9.1 contract approve --role planner
-npx github:dancampari/harness#v0.9.1 contract approve --role tester
+npx github:dancampari/harness#v0.10.0 feature propose
+npx github:dancampari/harness#v0.10.0 feature approve --role planner
+npx github:dancampari/harness#v0.10.0 feature approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.9.1 sprint qa
-npx github:dancampari/harness#v0.9.1 sprint qa --accept-screenshots
-npx github:dancampari/harness#v0.9.1 sprint qa --accept-fixtures
-npx github:dancampari/harness#v0.9.1 sprint repair
-npx github:dancampari/harness#v0.9.1 sprint score
-npx github:dancampari/harness#v0.9.1 run --resume
+npx github:dancampari/harness#v0.10.0 feature qa
+npx github:dancampari/harness#v0.10.0 feature qa --accept-screenshots
+npx github:dancampari/harness#v0.10.0 feature qa --accept-fixtures
+npx github:dancampari/harness#v0.10.0 feature repair
+npx github:dancampari/harness#v0.10.0 feature score
+npx github:dancampari/harness#v0.10.0 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -282,21 +294,43 @@ Harness does not block commits or pushes by default. The agreement gate does
 block QA until the active contract is `AGREED`; sensor verdicts are still
 reported as data for the agent or human to act on.
 
-## Spec Driven And Agent Agreement
+## TLC Spec-Driven And Agent Agreement
 
-Harness is Spec Driven:
+The harness is the gate; TLC is the method. The agent reads TLC at
+session start; the harness validates that the agent followed it.
 
-- `.harness/spec.md` is the project specification and persistent product bar.
-- `.harness/contracts/sprint-NNN.md` turns one user request into a small,
-  testable sprint contract.
-- In spec-driven mode, agents use the Harness-native Specify, Design, Tasks,
-  Execute, Validate flow from `.harness/skills/spec-driven/SKILL.md`.
-- Optional planning depth lives under `.harness/context/`, `.harness/design/`,
-  and `.harness/tasks/`; Harness does not create `.specs/` by default.
-- `.harness/agent-protocol.md`, `AGENTS.md`, `CLAUDE.md`, and Cursor rules tell
-  coding agents to create contracts, propose them, approve required roles, run
-  QA, read findings, fix, and score.
-- The evaluator is deterministic and isolated from the builder process.
+- `.specs/project/PROJECT.md` is the global product spec (TLC's
+  `spec.md` at project scope).
+- `.specs/project/STATE.md` records decisions, blockers, todos,
+  deferred work, and lessons. `harness state record <kind> "<msg>"`
+  appends structured entries.
+- `.specs/project/ROADMAP.md` is the prioritised feature list per TLC's
+  roadmap.md.
+- `.specs/features/<slug>/spec.md` is the feature spec. Acceptance
+  criteria use TLC's `WHEN <action> THEN system SHALL <outcome>` form;
+  the harness rejects the propose step when criteria miss the pattern
+  or the spec lacks `## Edge Cases` / `## Out of Scope` sections.
+- `.specs/features/<slug>/design.md` is mandatory for `Size: large`
+  features (architecture decisions).
+- `.specs/features/<slug>/tasks.md` is mandatory for `medium` / `large`
+  features. The granularity validator rejects tasks that touch more
+  than 3 files unless `Cohesive: true` is set.
+- `.specs/quick/NNN-slug/{TASK.md, SUMMARY.md}` records TLC Quick mode
+  (≤3 files, no agreement gate).
+- `.harness/skills/tlc-spec-driven/SKILL.md` ships the full TLC
+  methodology — 18 reference files (specify.md, design.md, tasks.md,
+  implement.md, validate.md, discuss.md, brownfield-mapping.md,
+  coding-principles.md, state-management.md, session-handoff.md,
+  roadmap.md, concerns.md, quick-mode.md, ...).
+- `.harness/skills/harness-gate/SKILL.md` documents how the harness
+  layers deterministic gates on top of TLC.
+- `.harness/agent-protocol.md`, `AGENTS.md`, `CLAUDE.md`, and Cursor
+  rules embed TLC's sub-agent delegation matrix and the Knowledge
+  Verification Chain (`verification.codebase` → `.docs` → `.context7`
+  → `.web` → `.uncertain`). See `docs/MULTI_AGENT_PROTOCOL.md` for the
+  full specification.
+- The evaluator runs in an isolated subprocess so the builder's context
+  cannot leak into the judge's.
 
 The PBQ-style agreement gate is deterministic:
 
@@ -464,7 +498,7 @@ terminal-dependent. When content exceeds the viewport, Harness shows internal
 range labels like `Report 1-12/40` or `Events 3-10/80`.
 
 ```text
-harness   Autonomous Development Pipeline   v0.9.1      Project: harness-demo   Agent: codex   Status: PASS
+harness   Autonomous Development Pipeline   v0.10.0      Project: harness-demo   Agent: codex   Status: PASS
 
 [1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 
@@ -526,6 +560,11 @@ Dimensions without a fast sensor are marked `SKIPPED` and do not block
 the verdict. The agreement gate is bypassed so the same command works
 during contract authoring. A non-zero exit code on `FAIL` lets git
 hooks block the offending commit.
+
+Fast QA is shift-left only: it does not write the full
+`.harness/reports/sprint-NNN.json` artifact used by `harness sprint
+score`. To consolidate a sprint, run full `harness sprint qa` after the
+contract is agreed, then run `harness sprint score`.
 
 Install the blocking pre-commit hook with:
 
@@ -671,38 +710,46 @@ Stderr is used for diagnostics.
 
 ## Project Files
 
-Harness creates this local directory:
+Harness writes two sibling trees: `.specs/` carries the agent-authored
+project memory and lives in git; `.harness/` carries runtime state and
+is mostly gitignored.
 
 ```text
-.harness/
-  config.yaml
-  spec.md
-  agent-protocol.md
-  setup.json
-  progress.md
-  skills/
-    spec-driven/
-      SKILL.md
-      references/
-    contract-authoring/
-      SKILL.md
-      references/
-    contract-review/
-      SKILL.md
-  context/
+.specs/                              # versioned in git
+  project/
+    PROJECT.md                       # global product spec
+    ROADMAP.md                       # prioritised feature list
+    STATE.md                         # decisions, blockers, todos, lessons
+    HANDOFF.md                       # session-handoff notes
+  codebase/                          # brownfield mapping (TLC's 7-file pack)
     STACK.md
     ARCHITECTURE.md
     CONVENTIONS.md
     TESTING.md
     INTEGRATIONS.md
     CONCERNS.md
-  design/
-    sprint-001.md
-  tasks/
-    sprint-001.md
+  features/
+    sprint-001/
+      spec.md                        # required, WHEN/THEN/SHALL criteria
+      design.md                      # required for Size: large
+      tasks.md                       # required for Size: medium | large
+  quick/
+    001-fix-navbar-overflow/
+      TASK.md
+      SUMMARY.md
+
+.harness/                            # mostly gitignored (memory.db, reports, etc.)
+  config.yaml
+  agent-protocol.md
+  setup.json
+  skills/
+    tlc-spec-driven/                 # vendored TLC, 18 reference files
+      SKILL.md
+      references/
+    harness-gate/                    # deterministic gate protocol
+      SKILL.md
   contracts/
-    sprint-001.md
-    sprint-001.lock.json
+    sprint-001.lock.json             # agreement lock (runtime state)
   approvals/
     sprint-001/
       planner.json
@@ -717,12 +764,16 @@ Harness creates this local directory:
     baseline/
     current/
     diff/
+  events.jsonl                       # every pipeline stage emits here
+  run-progress.json                  # atomic live snapshot
   memory.db
 ```
 
-`progress.md` is the narrative project memory and should be committed.
-`memory.db`, `reports/`, `repairs/`, and `screenshots/` are generated local
-state and should stay local.
+`.specs/` is committed and travels with the repo. `memory.db`,
+`reports/`, `repairs/`, and `screenshots/` are generated local state and
+stay local. Legacy projects authored before v0.10 keep `.harness/spec.md`,
+`.harness/progress.md`, and `.harness/{contracts,design,tasks,context}/`;
+`harness upgrade` migrates them losslessly into the layout above.
 
 ## Commands
 
@@ -735,16 +786,33 @@ harness skills install [--force] [--planning auto|spec-driven|contract|manual]
 harness skills status
 harness doctor [--strict] [--fix]
 harness spec
-harness sprint new <goal>
-harness sprint status
-harness contract status [--sprint N]
-harness contract propose [--sprint N]
-harness contract approve --role planner|tester [--sprint N]
-harness contract reject --role planner|tester --reason <text> [--sprint N]
-harness sprint qa [--format=tty|json] [--fast] [--accept-screenshots] [--accept-fixtures] [--allow-unagreed]
-harness sprint repair
-harness sprint score [--allow-fail]
-harness sprint list
+
+# Canonical feature surface (TLC vocabulary):
+harness feature new <goal>
+harness feature status
+harness feature propose [--sprint N]
+harness feature approve --role planner|tester [--sprint N]
+harness feature reject  --role planner|tester --reason <text> [--sprint N]
+harness feature qa [--format=tty|json] [--fast] [--accept-screenshots] [--accept-fixtures] [--allow-unagreed]
+harness feature repair
+harness feature score [--allow-fail]
+harness feature list
+
+# TLC project memory + ad-hoc:
+harness quick "<one-line>"                                 # TLC Quick mode (.specs/quick/NNN-slug/)
+harness roadmap                                            # print .specs/project/ROADMAP.md
+harness roadmap append "<line>"                            # append a checklist entry
+harness state record <decision|blocker|todo|deferred|lesson> "<msg>"   # append to STATE.md
+harness session pause ["<note>"]                           # write HANDOFF.md
+harness session resume [--clear]                           # read HANDOFF.md (optionally remove it)
+
+# Deprecated aliases (removed in v2.0):
+harness sprint new <goal>            # → harness feature new
+harness sprint status                # → harness feature status
+harness sprint qa | repair | score | list
+harness contract status | propose | approve | reject    # still supported as primary contract verbs
+
+# Operational:
 harness watch once [--fail-on-regression] [--format=tty|json]
 harness watch list [--limit N]
 harness context size [--format=tty|json]
@@ -760,8 +828,9 @@ harness explain <finding-id>
 ```bash
 go test ./...
 go vet ./...
-go build -o dist/harness .
+npm run build
 npm pack
+npm run smoke:package
 ```
 
 Local Windows test before installing from npm/GitHub:

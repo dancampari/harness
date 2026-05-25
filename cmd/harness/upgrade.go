@@ -31,12 +31,16 @@ func newUpgradeCmd(version string) *cobra.Command {
 
 Upgrade preserves project-owned state:
   - .harness/memory.db
-  - .harness/progress.md
-  - .harness/spec.md
-  - .harness/contracts/
-  - .harness/runs/
-  - .harness/reports/
-  - .harness/evaluations/
+  - .harness/runs/, reports/, evaluations/
+  - .specs/ (project memory + feature trees, after migration)
+
+It migrates legacy projects to the canonical TLC layout:
+  - .harness/spec.md         → .specs/project/PROJECT.md
+  - .harness/progress.md     → .specs/project/STATE.md
+  - .harness/context/*.md    → .specs/codebase/*.md
+  - .harness/contracts/<s>.md → .specs/features/<s>/spec.md
+  - .harness/design/<s>.md   → .specs/features/<s>/design.md
+  - .harness/tasks/<s>.md    → .specs/features/<s>/tasks.md
 
 It refreshes generated Harness files:
   - .harness/bin/harness
@@ -87,6 +91,13 @@ func runUpgrade(opts upgradeOptions, version string) error {
 	if err := ensureHarnessSkeleton(".harness", choices.Planning); err != nil {
 		return err
 	}
+	migrated, err := migrateLegacyArtifactsToSpecs(".harness")
+	if err != nil {
+		return fmt.Errorf("migrate legacy artifacts to .specs/: %w", err)
+	}
+	for _, line := range migrated {
+		fmt.Printf("  %s\n", line)
+	}
 	if err := ensurePersistentHarnessFiles(".harness", project, choices.Planning); err != nil {
 		return err
 	}
@@ -123,7 +134,8 @@ func runUpgrade(opts upgradeOptions, version string) error {
 
 	fmt.Println()
 	fmt.Println("Upgrade complete.")
-	fmt.Printf("  Preserved:       .harness/memory.db, progress.md, spec.md, contracts/, runs/, reports/, evaluations/\n")
+	fmt.Printf("  Preserved:       .harness/memory.db, runs/, reports/, evaluations/, .specs/\n")
+	fmt.Printf("  Migrated:        legacy .harness/{contracts,design,tasks,context,spec.md,progress.md} → .specs/\n")
 	fmt.Printf("  Refreshed:       project command, skills, agent protocol, hooks, safe config defaults\n")
 	fmt.Printf("  CLI references:  %s\n", choices.CLI)
 	fmt.Printf("  Planning mode:   %s\n", planningModeLabel(choices.Planning))
@@ -237,10 +249,7 @@ func ensurePersistentHarnessFiles(root string, project detect.ProjectInfo, plann
 			return fmt.Errorf("save config: %w", err)
 		}
 	}
-	if err := writeTemplate(filepath.Join(root, "spec.md"), specTemplate); err != nil {
-		return err
-	}
-	if err := writeTemplate(filepath.Join(root, "progress.md"), progressTemplate); err != nil {
+	if err := ensureProjectMemoryFiles(root); err != nil {
 		return err
 	}
 	if err := ensureAgentProtocolMode(root, planningMode); err != nil {

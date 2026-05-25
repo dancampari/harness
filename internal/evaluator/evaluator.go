@@ -192,13 +192,13 @@ func (e *Evaluator) EvaluateWith(ctx context.Context, root string, sprintNum int
 	dims := aggregate(results, e.cfg.Thresholds)
 	active := e.cfg.ActiveDimensions()
 	if isActive(active, config.DimContract) && !opts.SkipContract {
-		dims[string(sensors.DimContract)] = DimensionScore{
+		dims[string(sensors.DimContract)] = mergeContractDimension(dims[string(sensors.DimContract)], DimensionScore{
 			Dimension:   sensors.DimContract,
 			Score:       contractCheck.Score,
 			Threshold:   e.cfg.Thresholds.Contract,
 			Passed:      contractCheck.Score >= e.cfg.Thresholds.Contract,
 			SensorsUsed: []string{"contract-validator"},
-		}
+		}, e.cfg.Thresholds.Contract)
 	}
 
 	executedByDim := map[string]int{}
@@ -318,6 +318,16 @@ func (e *Evaluator) activeAdapterNames() []string {
 	var out []string
 	for _, dim := range e.cfg.ActiveDimensions() {
 		if dim == config.DimContract {
+			for _, name := range contractSensorNames {
+				if _, ok := e.registry.ByName(name); !ok {
+					continue
+				}
+				if seen[name] {
+					continue
+				}
+				seen[name] = true
+				out = append(out, name)
+			}
 			continue
 		}
 		for _, name := range e.cfg.AdapterNamesForDimension(dim) {
@@ -329,6 +339,52 @@ func (e *Evaluator) activeAdapterNames() []string {
 		}
 	}
 	return out
+}
+
+var contractSensorNames = []string{
+	"spec-deviation-scanner",
+	"scope-creep",
+	"tdd-violation",
+	"test-count-tracker",
+}
+
+var blockingContractFindingRules = map[string]struct{}{
+	"spec-deviation-without-reason": {},
+	"scope-creep":                   {},
+	"tdd-violation":                 {},
+	"test-count-regression":         {},
+}
+
+func mergeContractDimension(sensorScore, validatorScore DimensionScore, threshold int) DimensionScore {
+	if sensorScore.Dimension == "" {
+		validatorScore.Threshold = threshold
+		if hasBlockingContractFinding(validatorScore.Findings) {
+			validatorScore.Score = 0
+			validatorScore.Passed = false
+		}
+		return validatorScore
+	}
+	out := sensorScore
+	out.Threshold = threshold
+	out.SensorsUsed = append(out.SensorsUsed, validatorScore.SensorsUsed...)
+	out.Findings = append(out.Findings, validatorScore.Findings...)
+	if validatorScore.Score < out.Score {
+		out.Score = validatorScore.Score
+	}
+	if hasBlockingContractFinding(out.Findings) {
+		out.Score = 0
+	}
+	out.Passed = out.Score >= threshold
+	return out
+}
+
+func hasBlockingContractFinding(findings []sensors.Finding) bool {
+	for _, f := range findings {
+		if _, ok := blockingContractFindingRules[f.Rule]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // reviewSensorNames are the configured adapter names registered under

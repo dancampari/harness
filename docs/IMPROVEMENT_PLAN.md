@@ -24,6 +24,65 @@
 - **All P0 and P1 items closed.** v0.9+ work is the P2 polish backlog
   in this document.
 
+## Closed by the TLC unification (v0.10)
+
+The six-phase plan in `docs/UNIFICATION_PLAN.md` retired the following
+items from the P2 backlog below. Cite this section instead of reopening
+them:
+
+- **TLC-as-foundation rewrite.** `internal/skills/tlc/tlc-spec-driven/`
+  vendors the canonical TLC skill verbatim (~3,400 lines, 18 files);
+  `internal/skills/gate/harness-gate/SKILL.md` documents only the
+  deterministic gates. The 430-line `cmd/harness/spec_driven_skills.go`
+  reshape was deleted.
+- **`.specs/` artifact tree.** `.specs/project/{PROJECT,STATE,ROADMAP,
+  HANDOFF}.md`, `.specs/codebase/*.md`, `.specs/features/<slug>/*.md`,
+  `.specs/quick/NNN-slug/*` are now the source of truth.
+  `agreement.Manager` dual-reads (`.specs/` canonical → `.harness/`
+  legacy); `harness upgrade` migrates losslessly. See
+  `cmd/harness/specs_migrate.go` and its test.
+- **TLC spec.md structural validator.** Spec-driven mode rejects propose
+  unless every criterion is in `WHEN/THEN/SHALL` form and the spec has
+  `## Edge Cases` and `## Out of Scope` sections. See
+  `internal/planning/policy.go::tlcSpecPatternErrors`.
+- **TLC tasks.md granularity gate.** Tasks touching >3 files without
+  `Cohesive: true` are rejected at propose. See
+  `internal/planner/tasks.go` + `internal/planning/policy.go::
+  tlcTaskGranularityErrors`.
+- **SPEC_DEVIATION scanner sensor.** New deterministic sensor flags
+  `SPEC_DEVIATION` markers missing a `Reason:` annotation within five
+  lines. Contract dimension. See `internal/adapters/spec_deviation.go`.
+- **Scope-creep sensor.** New deterministic sensor compares `git diff
+  --name-only HEAD` against the union of every task's `Where:` paths
+  and flags files modified outside the declared scope. Contract
+  dimension. See `internal/adapters/scope_creep.go`.
+- **Blocking TLC contract sensors.** `SPEC_DEVIATION` without `Reason:`,
+  scope creep, TDD violations, and test-count regressions now hard-fail
+  the contract gate instead of being diluted by score averages. See
+  `internal/evaluator/evaluator.go` and the sensor tests.
+- **TLC commands.** `harness feature {new,status,qa,repair,score,list,
+  propose,approve,reject}`, `harness quick`, `harness roadmap`,
+  `harness state record`, `harness session pause | resume`. See
+  `cmd/harness/{feature,quick,roadmap,state,session}.go`.
+- **Multi-agent delegation matrix.** Generated `AGENTS.md` / `CLAUDE.md`
+  embed TLC's sub-agent delegation matrix and the Knowledge Verification
+  Chain. New `harness-researcher` persona for Codex + Claude. Canonical
+  spec at `docs/MULTI_AGENT_PROTOCOL.md`.
+- **Skill-integrations detection.** `harness setup` / `install-hooks`
+  detect `.claude/skills/mermaid-studio` and `codenavi`; the generated
+  agent doc lists detected runtimes so the orchestrator prefers them.
+  See `cmd/harness/skill_integrations.go`.
+- **`harness sprint` deprecation.** Legacy `harness sprint <verb>` prints
+  a one-line deprecation warning and emits `cli.deprecated`. Slated for
+  removal in v2.0.
+- **Vendored TLC drift gate.** `harness doctor [--strict]` hashes the
+  embedded skill packs against the on-disk copy and fails when they
+  differ. See `internal/skills/skills.go::VendoredHash` /
+  `InstalledHash`.
+
+Remaining open items below are P2 polish / quality-of-life work not
+related to the TLC unification.
+
 Forward-looking plan derived from a gap analysis against three canonical
 references on harness engineering:
 

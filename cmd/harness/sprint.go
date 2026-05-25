@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dancampari/harness/internal/agreement"
 	"github.com/dancampari/harness/internal/events"
@@ -11,10 +12,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// newSprintCmd builds the legacy `harness sprint` surface. As of Phase 4
+// of the unification plan, `harness feature` is the canonical
+// TLC-aligned vocabulary; sprint stays as a deprecated alias and is
+// scheduled for removal in v2.0.
+//
+// Every invocation prints a one-line deprecation warning on stderr and
+// emits a `cli.deprecated` event so the trend tooling can surface the
+// last project still leaning on the old surface.
 func newSprintCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sprint",
-		Short: "Manage sprints (Contract → Build → QA → Score)",
+		Use:        "sprint",
+		Short:      "Deprecated alias of `harness feature` (Contract → Build → QA → Score)",
+		Deprecated: "use `harness feature` instead; the `sprint` alias will be removed in v2.0",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			emitDeprecatedAlias("sprint", strings.Join(append([]string{cmd.Name()}, args...), " "))
+			return nil
+		},
 	}
 	cmd.AddCommand(
 		newSprintNewCmd(),
@@ -25,6 +39,18 @@ func newSprintCmd() *cobra.Command {
 		newSprintListCmd(),
 	)
 	return cmd
+}
+
+// emitDeprecatedAlias prints a one-line warning to stderr and records a
+// `cli.deprecated` event so doctor + trend tooling can surface usage of
+// the legacy `harness sprint` alias. Safe to call even when `.harness/`
+// does not exist — the events package no-ops on a missing directory.
+func emitDeprecatedAlias(alias, invocation string) {
+	fmt.Fprintf(os.Stderr,
+		"harness: `%s` is a deprecated alias — use `harness feature` instead (alias removed in v2.0).\n",
+		alias)
+	events.Record(".harness", "cli.deprecated", events.PhaseContract,
+		fmt.Sprintf("alias=%s invocation=%s", alias, invocation), "")
 }
 
 func newSprintNewCmd() *cobra.Command {
@@ -93,7 +119,9 @@ The --fast flag is the shift-left mode used by the pre-commit hook: it
 filters out tests, coverage, audit, and browser sensors so feedback
 returns in seconds. Dimensions without a fast sensor are reported as
 SKIPPED, do not contribute to verdict or score, and do not overwrite
-the full QA report on disk.
+the full QA report on disk. A fast QA result is not consolidable by
+harness sprint score; run full harness sprint qa after agreement before
+scoring.
 
 The --internal flag is reserved for the spawned subprocess itself. End
 users never pass it; the parent process sets it when forking.`,
@@ -140,8 +168,8 @@ users never pass it; the parent process sets it when forking.`,
 				}
 			}
 			// Fast mode is consumed by pre-commit, so FAIL must propagate
-			// as a non-zero exit code; the report is already written, the
-			// hook only needs the signal.
+			// as a non-zero exit code. Fast runs intentionally do not write
+			// scoreable reports; the hook only needs the signal.
 			if fast && result.Verdict() == "FAIL" {
 				return fmt.Errorf("fast QA returned FAIL; fix findings or commit with --no-verify to bypass")
 			}
@@ -167,7 +195,7 @@ func newSprintScoreCmd() *cobra.Command {
 	var allowFail bool
 	cmd := &cobra.Command{
 		Use:   "score",
-		Short: "Consolidate a passing verdict and update progress.md + memory.db",
+		Short: "Consolidate a passing verdict and update STATE.md + memory.db",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, err := sprint.NewManager(".harness")
 			if err != nil {
@@ -183,7 +211,7 @@ func newSprintScoreCmd() *cobra.Command {
 				report.SprintNumber, report.Score.Total, report.Verdict)
 			fmt.Printf("  Report: %s\n", report.Path)
 			fmt.Printf("  Evaluation: %s\n", report.EvaluationPath)
-			fmt.Printf("  Progress updated: %s\n", filepath.Join(".harness", "progress.md"))
+			fmt.Printf("  State updated: %s\n", filepath.Join(".specs", "project", "STATE.md"))
 			openReportIfInteractive(report.EvaluationPath)
 			return nil
 		},

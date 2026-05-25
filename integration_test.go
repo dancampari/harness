@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -182,12 +183,20 @@ func TestSetupYesInstallsContractSkillsAndAgentReferences(t *testing.T) {
 	runHarness(t, exe, root, "setup", "--yes", "--cli", "codex", "--scope", "project")
 
 	assertFileContains(t,
-		filepath.Join(root, ".harness", "skills", "contract-authoring", "SKILL.md"),
-		"Harness Contract Authoring",
+		filepath.Join(root, ".harness", "skills", "tlc-spec-driven", "SKILL.md"),
+		"Specify",
+	)
+	assertFileContains(t,
+		filepath.Join(root, ".harness", "skills", "harness-gate", "SKILL.md"),
+		"Agreement gate",
 	)
 	assertFileContains(t,
 		filepath.Join(root, "AGENTS.md"),
-		".harness/skills/contract-authoring/SKILL.md",
+		".harness/skills/tlc-spec-driven/SKILL.md",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "AGENTS.md"),
+		".harness/skills/harness-gate/SKILL.md",
 	)
 	assertFileContains(t,
 		filepath.Join(root, ".harness", "setup.json"),
@@ -209,15 +218,26 @@ func buildHarness(t *testing.T) string {
 	return exe
 }
 
+// runHarness invokes the harness binary and returns stdout. Stderr is
+// captured separately so the deprecation warning written by
+// `harness sprint <verb>` (and other diagnostics) does not contaminate
+// the stdout stream that callers parse as JSON. Stderr is surfaced via
+// t.Log when set, plus on failure so the test author still sees it.
 func runHarness(t *testing.T, exe, dir string, args ...string) []byte {
 	t.Helper()
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdout, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("harness %s failed: %v\n%s", strings.Join(args, " "), err, out)
+		t.Fatalf("harness %s failed: %v\nstdout:\n%s\nstderr:\n%s",
+			strings.Join(args, " "), err, stdout, stderr.String())
 	}
-	return out
+	if stderr.Len() > 0 {
+		t.Logf("harness %s stderr:\n%s", strings.Join(args, " "), stderr.String())
+	}
+	return stdout
 }
 
 func writeIntegrationFile(t *testing.T, path, content string) {

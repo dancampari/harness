@@ -14,6 +14,7 @@ type fakeSensor struct {
 	dimension sensors.Dimension
 	available bool
 	score     int
+	findings  []sensors.Finding
 }
 
 func (f fakeSensor) Name() string                 { return f.name }
@@ -24,6 +25,7 @@ func (f fakeSensor) Run(ctx context.Context, root string) sensors.Result {
 		SensorName: f.name,
 		Dimension:  f.dimension,
 		RawScore:   f.score,
+		Findings:   f.findings,
 		Duration:   time.Millisecond,
 	}
 }
@@ -86,5 +88,38 @@ func TestEvaluatePassesOnlyWhenAllActiveDimensionsPass(t *testing.T) {
 	}
 	if len(result.Sensors) != 1 || !result.Sensors[0].Executed {
 		t.Fatalf("expected executed sensor status, got %+v", result.Sensors)
+	}
+}
+
+func TestEvaluateHardFailsBlockingContractFinding(t *testing.T) {
+	cfg := config.DefaultFor("unknown")
+	reg := sensors.NewRegistry()
+	reg.Register(fakeSensor{
+		name:      "spec-deviation-scanner",
+		dimension: sensors.DimContract,
+		available: true,
+		score:     100,
+		findings: []sensors.Finding{{
+			Dimension: sensors.DimContract,
+			Severity:  sensors.SeverityMedium,
+			Rule:      "spec-deviation-without-reason",
+			Message:   "orphan SPEC_DEVIATION marker",
+		}},
+	})
+
+	ev := New(cfg, reg)
+	result, err := ev.Evaluate(context.Background(), t.TempDir(), 1, ContractCheckResult{
+		Status: "satisfied",
+		Score:  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Verdict != "FAIL" {
+		t.Fatalf("expected FAIL for blocking contract finding, got %s", result.Verdict)
+	}
+	contract := result.Dimensions[config.DimContract]
+	if contract.Score != 0 || contract.Passed {
+		t.Fatalf("expected contract hard-fail score 0, got %+v", contract)
 	}
 }

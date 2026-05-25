@@ -41,11 +41,11 @@ func TestUpgradeRefreshesGeneratedFilesAndPreservesMemory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(".harness", "setup.json"), []byte(`{"coding_cli":"codex","planning_mode":"spec-driven","contract_skills_enabled":true,"install_scope":"project"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	staleSkill := filepath.Join(".harness", "skills", "contract-authoring", "SKILL.md")
-	if err := os.MkdirAll(filepath.Dir(staleSkill), 0o755); err != nil {
+	staleLegacy := filepath.Join(".harness", "skills", "contract-authoring", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(staleLegacy), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(staleSkill, []byte("old skill\n"), 0o644); err != nil {
+	if err := os.WriteFile(staleLegacy, []byte("old legacy skill\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	db, err := memory.Open(filepath.Join(".harness", "memory.db"))
@@ -63,26 +63,44 @@ func TestUpgradeRefreshesGeneratedFilesAndPreservesMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gotProgress, err := os.ReadFile(filepath.Join(".harness", "progress.md"))
+	// Phase 2: upgrade migrates legacy artifacts into the canonical
+	// .specs/ tree. progress.md becomes STATE.md, contracts/sprint-NNN.md
+	// becomes features/sprint-NNN/spec.md. Content must round-trip
+	// losslessly; the legacy files must no longer exist.
+	migratedState, err := os.ReadFile(filepath.Join(".specs", "project", "STATE.md"))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("expected progress.md to be migrated to .specs/project/STATE.md: %v", err)
 	}
-	if string(gotProgress) != progress {
-		t.Fatalf("progress.md was overwritten:\n%s", gotProgress)
+	if string(migratedState) != progress {
+		t.Fatalf("STATE.md content drift after migration:\n%s", migratedState)
 	}
-	gotContract, err := os.ReadFile(contractPath)
+	if _, err := os.Stat(filepath.Join(".harness", "progress.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy .harness/progress.md to be removed, got err=%v", err)
+	}
+	migratedSpec, err := os.ReadFile(filepath.Join(".specs", "features", "sprint-001", "spec.md"))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("expected contract to be migrated to .specs/features/sprint-001/spec.md: %v", err)
 	}
-	if !strings.Contains(string(gotContract), "keep this contract") {
-		t.Fatalf("contract was overwritten:\n%s", gotContract)
+	if !strings.Contains(string(migratedSpec), "keep this contract") {
+		t.Fatalf("migrated spec content drift:\n%s", migratedSpec)
 	}
-	gotSkill, err := os.ReadFile(staleSkill)
+	if _, err := os.Stat(contractPath); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy .harness/contracts/sprint-001.md to be removed, got err=%v", err)
+	}
+	if _, err := os.Stat(staleLegacy); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy skill dir to be removed on upgrade, got err=%v", err)
+	}
+	gateSkill := filepath.Join(".harness", "skills", "harness-gate", "SKILL.md")
+	gotGate, err := os.ReadFile(gateSkill)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("expected canonical harness-gate skill to be installed: %v", err)
 	}
-	if !strings.Contains(string(gotSkill), "# Harness Contract Authoring") {
-		t.Fatalf("expected generated skill to be refreshed, got:\n%s", gotSkill)
+	if !strings.Contains(string(gotGate), "Agreement gate") {
+		t.Fatalf("expected harness-gate skill to be refreshed, got:\n%s", gotGate)
+	}
+	tlcSkill := filepath.Join(".harness", "skills", "tlc-spec-driven", "SKILL.md")
+	if _, err := os.Stat(tlcSkill); err != nil {
+		t.Fatalf("expected canonical tlc-spec-driven skill to be installed: %v", err)
 	}
 	agents, err := os.ReadFile("AGENTS.md")
 	if err != nil {

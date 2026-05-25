@@ -28,17 +28,18 @@ func newContextSizeCmd() *cobra.Command {
 		Short: "Estimate the agent context cost of harness memory files",
 		Long: `Sums the byte size of the files an agent reads at session start:
 
-  - .harness/spec.md
-  - .harness/progress.md
+  - .specs/project/PROJECT.md and .specs/project/STATE.md
   - .harness/agent-protocol.md
-  - .harness/context/*.md
-  - .harness/contracts/sprint-NNN.md for the latest sprint
-  - .harness/design/sprint-NNN.md and .harness/tasks/sprint-NNN.md when present
+  - .specs/codebase/*.md
+  - .specs/features/sprint-NNN/{spec,design,tasks}.md for the latest sprint
+  - Legacy .harness/spec.md, .harness/progress.md, .harness/context/*.md,
+    and .harness/{contracts,design,tasks}/sprint-NNN.md are still counted
+    until ` + "`harness upgrade`" + ` migrates them.
 
 Converts the total to an approximate token count using a constant
 heuristic of 4 bytes per token. Long-running projects often drift past
-the soft limit; pruning progress.md and context/ entries restores
-working window for the agent.`,
+the soft limit; pruning STATE.md and codebase/ entries restores working
+window for the agent.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -78,7 +79,7 @@ func printContextSize(s *budget.Snapshot, sprintNumber int) {
 	fmt.Printf("  Token est.:    ~%d (heuristic %.2f tokens/byte)\n", s.TokenEstimate, budget.TokensPerByte)
 	fmt.Printf("  Soft limit:    %d tokens\n", s.SoftLimitTokens)
 	if s.OverBudget() {
-		fmt.Printf("  STATUS:        OVER BUDGET — consider pruning progress.md or context/*.md\n")
+		fmt.Printf("  STATUS:        OVER BUDGET — consider pruning .specs/project/STATE.md or .specs/codebase/*.md\n")
 	} else {
 		fmt.Printf("  STATUS:        within budget\n")
 	}
@@ -92,30 +93,55 @@ func printContextSize(s *budget.Snapshot, sprintNumber int) {
 }
 
 var sprintFileRe = regexp.MustCompile(`^sprint-(\d+)\.md$`)
+var sprintDirRe = regexp.MustCompile(`^sprint-(\d+)$`)
 
 // latestSprintNumber finds the highest sprint number with a contract on
-// disk. Returns 0 when there is no sprint yet.
+// disk, checking both the canonical .specs/features/<slug>/spec.md
+// layout and the legacy .harness/contracts/sprint-NNN.md layout.
+// Returns 0 when no sprint exists.
 func latestSprintNumber(harnessDir string) int {
-	dir := filepath.Join(harnessDir, "contracts")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return 0
-	}
 	max := 0
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		m := sprintFileRe.FindStringSubmatch(e.Name())
-		if m == nil {
-			continue
-		}
-		var n int
-		fmt.Sscanf(m[1], "%d", &n)
-		if n > max {
-			max = n
+
+	specsRoot := siblingSpecsRoot(harnessDir)
+	featuresDir := filepath.Join(specsRoot, "features")
+	if entries, err := os.ReadDir(featuresDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			match := sprintDirRe.FindStringSubmatch(e.Name())
+			if match == nil {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(featuresDir, e.Name(), "spec.md")); err != nil {
+				continue
+			}
+			var n int
+			fmt.Sscanf(match[1], "%d", &n)
+			if n > max {
+				max = n
+			}
 		}
 	}
+
+	contractsDir := filepath.Join(harnessDir, "contracts")
+	if entries, err := os.ReadDir(contractsDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			match := sprintFileRe.FindStringSubmatch(e.Name())
+			if match == nil {
+				continue
+			}
+			var n int
+			fmt.Sscanf(match[1], "%d", &n)
+			if n > max {
+				max = n
+			}
+		}
+	}
+
 	return max
 }
 

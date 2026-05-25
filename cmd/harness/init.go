@@ -23,11 +23,11 @@ func newInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize .harness/ in the current repo",
-		Long: `Creates the .harness/ directory with:
-  - config.yaml (auto-detected for your stack)
-  - spec.md (template you should fill in)
-  - progress.md (the narrative brain of the project)
-  - contracts/, evaluations/, repairs/, screenshots/, reports/ (empty dirs)
+		Long: `Creates the .harness/ runtime directory and .specs/ project memory with:
+  - .harness/config.yaml (auto-detected for your stack)
+  - .specs/project/PROJECT.md (template you should fill in)
+  - .specs/project/STATE.md (the narrative brain of the project)
+  - contracts/, evaluations/, repairs/, screenshots/, reports/ (empty runtime dirs)
   - memory.db (SQLite index, initialized)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			planningMode := normalizePlanningMode(planning)
@@ -87,12 +87,6 @@ func runInit(opts initOptions) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	if err := writeTemplate(filepath.Join(root, "spec.md"), specTemplate); err != nil {
-		return err
-	}
-	if err := writeTemplate(filepath.Join(root, "progress.md"), progressTemplate); err != nil {
-		return err
-	}
 	planningMode := opts.PlanningMode
 	if planningMode == "" {
 		if opts.InstallSkills {
@@ -100,6 +94,17 @@ func runInit(opts initOptions) error {
 		} else {
 			planningMode = PlanningManual
 		}
+	}
+	if err := writeSetupState(setupChoices{
+		CLI:      normalizeCLI(opts.CLI),
+		Planning: planningMode,
+		Skills:   planningUsesSkills(planningMode),
+		Scope:    "project",
+	}, project); err != nil {
+		return err
+	}
+	if err := ensureProjectMemoryFiles(root); err != nil {
+		return err
 	}
 	if err := writeTemplate(filepath.Join(root, "agent-protocol.md"), agentProtocolTemplate(harnessInvocation(), planningMode)); err != nil {
 		return err
@@ -150,7 +155,7 @@ func runInit(opts initOptions) error {
 	if !opts.Quiet {
 		invoke := harnessInvocation()
 		fmt.Println("  Next steps:")
-		fmt.Println("    1. Edit .harness/spec.md with your product spec")
+		fmt.Println("    1. Edit .specs/project/PROJECT.md with your product spec")
 		fmt.Printf("    2. %s install-hooks --interactive    # choose Codex, Claude Code, or Cursor\n", invoke)
 		fmt.Printf("    3. %s sprint new \"first goal\"\n", invoke)
 	}
@@ -180,7 +185,49 @@ func ensureHarnessSkeleton(root, planningMode string) error {
 			return fmt.Errorf("mkdir %s: %w", d, err)
 		}
 	}
+	if err := ensureSpecsSkeleton(root); err != nil {
+		return err
+	}
 	return nil
+}
+
+// ensureSpecsSkeleton creates the canonical TLC artifact tree at .specs/
+// next to the workspace's .harness/ directory. New projects start here;
+// existing projects pick it up via `harness upgrade`.
+func ensureSpecsSkeleton(harnessRoot string) error {
+	specsRoot := siblingSpecsRoot(harnessRoot)
+	for _, d := range []string{
+		specsRoot,
+		filepath.Join(specsRoot, "project"),
+		filepath.Join(specsRoot, "codebase"),
+		filepath.Join(specsRoot, "features"),
+		filepath.Join(specsRoot, "quick"),
+	} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", d, err)
+		}
+	}
+	return nil
+}
+
+// siblingSpecsRoot returns the canonical .specs/ directory next to the
+// caller-provided .harness/ root. Mirrors agreement.defaultSpecsRoot so
+// both paths resolve to the same workspace location.
+func siblingSpecsRoot(harnessRoot string) string {
+	clean := filepath.Clean(harnessRoot)
+	parent := filepath.Dir(clean)
+	if parent == "" || parent == "." {
+		return ".specs"
+	}
+	return filepath.Join(parent, ".specs")
+}
+
+func ensureProjectMemoryFiles(harnessRoot string) error {
+	specsRoot := siblingSpecsRoot(harnessRoot)
+	if err := writeTemplate(filepath.Join(specsRoot, "project", "PROJECT.md"), specTemplate); err != nil {
+		return err
+	}
+	return writeTemplate(filepath.Join(specsRoot, "project", "STATE.md"), progressTemplate)
 }
 
 func writeTemplate(path, content string) error {
@@ -196,7 +243,7 @@ func ensureHarnessGitignore(root string) error {
 	if b, err := os.ReadFile(path); err == nil {
 		existing = string(b)
 	}
-	lines := []string{"memory.db", "reports/", "repairs/", "screenshots/", "tmp/", "run-progress.json", "run-progress.json.tmp", "watch/", "events.jsonl", "commands.log"}
+	lines := []string{"memory.db", "reports/", "repairs/", "screenshots/", "tmp/", "run-progress.json", "run-progress.json.tmp", "watch/", "events.jsonl", "commands.log", "test-count.json", "traceability.json"}
 	for _, line := range lines {
 		if !strings.Contains(existing, line) {
 			if existing != "" && !strings.HasSuffix(existing, "\n") {
@@ -285,7 +332,7 @@ Harness functions:
 
 Autonomy rules:
 
-1. Read .harness/progress.md, .harness/spec.md, and this file at session
+1. Read .specs/project/STATE.md, .specs/project/PROJECT.md, and this file at session
    start.
 2. Create or update the sprint contract before implementing a feature.
 3. Run ` + "`" + invoke + ` contract propose` + "`" + ` after the contract is written.
