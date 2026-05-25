@@ -10,6 +10,7 @@ import (
 )
 
 func TestUpgradeRefreshesGeneratedFilesAndPreservesMemory(t *testing.T) {
+	stubInstallableHarnessExecutable(t)
 	root := t.TempDir()
 	wd, err := os.Getwd()
 	if err != nil {

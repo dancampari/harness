@@ -28,13 +28,16 @@ try {
 
   npm uninstall -g $oldPackage | Out-Host
 
-  foreach ($name in @("harness", "harness.cmd", "harness.ps1")) {
+  foreach ($name in @("harness", "harness.cmd", "harness.ps1", "harness.exe")) {
     $path = Join-Path $shimDir $name
     if (-not (Test-Path $path)) {
       continue
     }
-    $content = Get-Content -Raw -LiteralPath $path -ErrorAction SilentlyContinue
-    if ($Force -or $content -like "*$oldPackage*") {
+    $content = ""
+    if ($name -ne "harness.exe") {
+      $content = Get-Content -Raw -LiteralPath $path -ErrorAction SilentlyContinue
+    }
+    if ($Force -or $name -eq "harness.exe" -or $content -like "*$oldPackage*" -or $content -like "*harness.exe*") {
       Remove-Item -LiteralPath $path -Force
     }
   }

@@ -8,6 +8,7 @@ import (
 )
 
 func TestInstallHooksSpecDrivenWritesProviderReferences(t *testing.T) {
+	stubInstallableHarnessExecutable(t)
 	root := t.TempDir()
 	previous, err := os.Getwd()
 	if err != nil {

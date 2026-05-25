@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +32,9 @@ type setupChoices struct {
 	Skills   bool
 	Scope    string
 }
+
+var currentExecutablePath = os.Executable
+var validateInstallableHarnessExecutable = validateHarnessExecutable
 
 func newSetupCmd(version string) *cobra.Command {
 	var opts setupOptions
@@ -317,9 +321,9 @@ func writeSetupState(choices setupChoices, project detect.ProjectInfo) error {
 }
 
 func installGlobalCommand() error {
-	exe, err := os.Executable()
+	exe, err := currentInstallableHarnessExecutable()
 	if err != nil {
-		return fmt.Errorf("locate current harness executable: %w", err)
+		return err
 	}
 	dirs := globalInstallDirs()
 	if len(dirs) == 0 {
@@ -400,9 +404,9 @@ func installProjectCommand() error {
 	if _, err := os.Stat(".harness"); err != nil {
 		return nil
 	}
-	exe, err := os.Executable()
+	exe, err := currentInstallableHarnessExecutable()
 	if err != nil {
-		return fmt.Errorf("locate current harness executable: %w", err)
+		return err
 	}
 	dir := filepath.Join(".harness", "bin")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -414,6 +418,36 @@ func installProjectCommand() error {
 	}
 	if err := copyFile(exe, dest, 0o755); err != nil {
 		return fmt.Errorf("install project harness command: %w", err)
+	}
+	return nil
+}
+
+func currentInstallableHarnessExecutable() (string, error) {
+	exe, err := currentExecutablePath()
+	if err != nil {
+		return "", fmt.Errorf("locate current harness executable: %w", err)
+	}
+	if err := validateInstallableHarnessExecutable(exe); err != nil {
+		return "", fmt.Errorf("current executable is not an installable Harness CLI (%s): %w", exe, err)
+	}
+	return exe, nil
+}
+
+func validateHarnessExecutable(exe string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, exe, "--version")
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return fmt.Errorf("version check timed out")
+	}
+	if err != nil {
+		return fmt.Errorf("version check failed: %w", err)
+	}
+	line := firstLine(strings.TrimSpace(string(out)))
+	if !strings.HasPrefix(line, "harness version ") {
+		return fmt.Errorf("version check returned %q", line)
 	}
 	return nil
 }
@@ -479,6 +513,13 @@ func samePath(a, b string) bool {
 		return false
 	}
 	return strings.EqualFold(filepath.Clean(aa), filepath.Clean(bb))
+}
+
+func firstLine(value string) string {
+	if i := strings.IndexAny(value, "\r\n"); i >= 0 {
+		return value[:i]
+	}
+	return value
 }
 
 func pathContains(dir string) bool {

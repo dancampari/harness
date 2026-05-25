@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project follows [Semantic Versioning](https://semver.org/) once
 production-ready.
 
+## [0.10.2] - 2026-05-25
+
+Windows global install hardening patch.
+
+### Fixed
+
+- Project and global installs now validate the source executable before copying
+  it into `.harness/bin` or a global npm prefix, preventing Go test binaries
+  from being installed as `harness.exe`.
+- The local development link script now removes stale Windows `harness.exe`
+  shims before relinking the package.
+
 ## [0.10.1] - 2026-05-25
 
 TUI launch compatibility patch.
