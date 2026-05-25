@@ -417,11 +417,8 @@ func (c *Contract) CheckAgainstDiff(root string) evaluator.ContractCheckResult {
 
 	for _, d := range c.Deliverables {
 		totalChecks++
-		path := d.Path
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(root, path)
-		}
-		if _, err := os.Stat(path); err != nil {
+		path, found := resolveDeliverablePath(root, d.Path)
+		if !found {
 			res.MissingDeliverables = append(res.MissingDeliverables, d.Path)
 			totalChecks += len(d.MustExport)
 			continue
@@ -483,6 +480,44 @@ func (c *Contract) CheckAgainstDiff(root string) evaluator.ContractCheckResult {
 	return res
 }
 
+func resolveDeliverablePath(root, contractPath string) (string, bool) {
+	path := contractPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return path, true
+	}
+
+	pattern, ok := deliverablePlaceholderGlob(root, contractPath)
+	if !ok {
+		return path, false
+	}
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return path, false
+	}
+	for _, match := range matches {
+		if _, err := os.Stat(match); err == nil {
+			return match, true
+		}
+	}
+	return path, false
+}
+
+var deliverablePlaceholderToken = regexp.MustCompile(`<[A-Za-z0-9_-]+>`)
+
+func deliverablePlaceholderGlob(root, contractPath string) (string, bool) {
+	path := contractPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	path = filepath.Clean(path)
+	if !deliverablePlaceholderToken.MatchString(path) {
+		return "", false
+	}
+	return deliverablePlaceholderToken.ReplaceAllString(path, "*"), true
+}
 func formatUnmetCriterion(cr AcceptanceCriterion) string {
 	prefix := fmt.Sprintf("criterion #%d", cr.Number)
 	if cr.RequirementID != "" {

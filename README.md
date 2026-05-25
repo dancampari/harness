@@ -29,7 +29,7 @@ is deterministic, conservative, and reproducible.
 Current public GitHub install. This is the one-command bootstrap:
 
 ```bash
-npx github:dancampari/harness#v0.10.3
+npx github:dancampari/harness#v0.10.4
 ```
 
 It detects the project, creates `.harness/`, asks which coding CLI will drive
@@ -68,12 +68,12 @@ For zero prompts:
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.10.3 --yes
-npx github:dancampari/harness#v0.10.3 --cli codex --yes
-npx github:dancampari/harness#v0.10.3 --cli claude --yes
-npx github:dancampari/harness#v0.10.3 --cli cursor --yes
-npx github:dancampari/harness#v0.10.3 --cli claude --planning spec-driven --scope project --yes
-npx github:dancampari/harness#v0.10.3 --cli codex --planning manual --scope global --yes
+npx github:dancampari/harness#v0.10.4 --yes
+npx github:dancampari/harness#v0.10.4 --cli codex --yes
+npx github:dancampari/harness#v0.10.4 --cli claude --yes
+npx github:dancampari/harness#v0.10.4 --cli cursor --yes
+npx github:dancampari/harness#v0.10.4 --cli claude --planning spec-driven --scope project --yes
+npx github:dancampari/harness#v0.10.4 --cli codex --planning manual --scope global --yes
 ```
 
 `--skills on|off` remains supported as a legacy alias. New installs should use
@@ -84,7 +84,7 @@ npx github:dancampari/harness#v0.10.3 --cli codex --planning manual --scope glob
 Use one command to refresh Harness in a project that already has `.harness/`:
 
 ```bash
-npx github:dancampari/harness#v0.10.3 upgrade --yes
+npx github:dancampari/harness#v0.10.4 upgrade --yes
 ```
 
 The upgrade command preserves project memory and history:
@@ -148,8 +148,8 @@ falls back to building from source with Go when Go is installed.
 
 ```bash
 cd your-project
-npx github:dancampari/harness#v0.10.3 --yes
-npx github:dancampari/harness#v0.10.3 feature new "implement user auth"
+npx github:dancampari/harness#v0.10.4 --yes
+npx github:dancampari/harness#v0.10.4 feature new "implement user auth"
 ```
 
 With automated contract skills enabled, the coding CLI should create and fill
@@ -163,21 +163,21 @@ contract yourself:
 Propose and approve the exact contract hash before implementation:
 
 ```bash
-npx github:dancampari/harness#v0.10.3 feature propose
-npx github:dancampari/harness#v0.10.3 feature approve --role planner
-npx github:dancampari/harness#v0.10.3 feature approve --role tester
+npx github:dancampari/harness#v0.10.4 feature propose
+npx github:dancampari/harness#v0.10.4 feature approve --role planner
+npx github:dancampari/harness#v0.10.4 feature approve --role tester
 ```
 
 Let Codex, Claude Code, Cursor, or a human implement the agreed contract, then
 run:
 
 ```bash
-npx github:dancampari/harness#v0.10.3 feature qa
-npx github:dancampari/harness#v0.10.3 feature qa --accept-screenshots
-npx github:dancampari/harness#v0.10.3 feature qa --accept-fixtures
-npx github:dancampari/harness#v0.10.3 feature repair
-npx github:dancampari/harness#v0.10.3 feature score
-npx github:dancampari/harness#v0.10.3 run --resume
+npx github:dancampari/harness#v0.10.4 feature qa
+npx github:dancampari/harness#v0.10.4 feature qa --accept-screenshots
+npx github:dancampari/harness#v0.10.4 feature qa --accept-fixtures
+npx github:dancampari/harness#v0.10.4 feature repair
+npx github:dancampari/harness#v0.10.4 feature score
+npx github:dancampari/harness#v0.10.4 run --resume
 ```
 
 Use `--accept-screenshots` only after reviewing the first visual baseline. Use
@@ -505,7 +505,7 @@ harness run --resume --no-alt-screen
 ```
 
 ```text
-harness   Autonomous Development Pipeline   v0.10.3      Project: harness-demo   Agent: codex   Status: PASS
+harness   Autonomous Development Pipeline   v0.10.4      Project: harness-demo   Agent: codex   Status: PASS
 
 [1] Overview   [2] Runs   [3] Report   [4] Logs   [5] Skills   [6] Doctor
 

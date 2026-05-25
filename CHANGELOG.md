@@ -5,6 +5,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project follows [Semantic Versioning](https://semver.org/) once
 production-ready.
 
+## [0.10.4] - 2026-05-25
+
+Contract deliverable placeholder patch.
+
+### Fixed
+
+- Deliverable paths containing placeholder tokens such as `<timestamp>` now
+  match concrete workspace files during contract checks. For example,
+  `packages/db/prisma/migrations/<timestamp>_init/migration.sql` can satisfy a
+  concrete migration directory like `20260524120000_init/migration.sql`.
+- Placeholder deliverables still report the original contract path when no
+  concrete file matches, and required export checks run against the resolved
+  file.
 ## [0.10.3] - 2026-05-25
 
 Canonical feature command reference patch.

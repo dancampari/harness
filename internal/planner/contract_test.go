@@ -318,6 +318,78 @@ Legacy contracts with no evidence must keep their pre-existing score.
 	}
 }
 
+func TestContractCheckMatchesPlaceholderDeliverablePath(t *testing.T) {
+	repo := t.TempDir()
+	mkfile(t,
+		filepath.Join(repo, "packages", "db", "prisma", "migrations", "20260524120000_init_multitenant_pgvector", "migration.sql"),
+		"CREATE EXTENSION IF NOT EXISTS vector;\nCREATE TABLE embeddings (embedding_vector vector NOT NULL);\n")
+	mkfile(t,
+		filepath.Join(repo, "src", "generated.ts"),
+		"export function generatedClient() { return 'ok'; }\n")
+
+	contractPath := filepath.Join(repo, ".harness", "contracts", "sprint-001.md")
+	mkfile(t, contractPath, `# Sprint 001 - placeholder path
+
+## Goal
+Check placeholder deliverables.
+
+## Deliverables
+- `+"`packages/db/prisma/migrations/<timestamp>_init_multitenant_pgvector/migration.sql`"+`
+- `+"`src/<name>.ts`"+` exports: `+"`generatedClient`"+`
+
+## Acceptance Criteria
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | works     | 8/10      |
+`)
+	c, err := Parse(contractPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := c.CheckAgainstDiff(repo)
+	if res.Status != "satisfied" {
+		t.Fatalf("expected satisfied, got %+v", res)
+	}
+	if len(res.MissingDeliverables) != 0 {
+		t.Fatalf("expected no missing deliverables, got %v", res.MissingDeliverables)
+	}
+	if len(res.UnmetCriteria) != 0 {
+		t.Fatalf("expected placeholder export to be verified, got %v", res.UnmetCriteria)
+	}
+}
+
+func TestContractCheckReportsMissingPlaceholderDeliverablePath(t *testing.T) {
+	repo := t.TempDir()
+	contractPath := filepath.Join(repo, ".harness", "contracts", "sprint-001.md")
+	mkfile(t, contractPath, `# Sprint 001 - missing placeholder path
+
+## Goal
+Check missing placeholder deliverables.
+
+## Deliverables
+- `+"`packages/db/prisma/migrations/<timestamp>_init_multitenant_pgvector/migration.sql`"+`
+
+## Acceptance Criteria
+| # | Criterion | Threshold |
+|---|-----------|-----------|
+| 1 | works     | 8/10      |
+`)
+	c, err := Parse(contractPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := c.CheckAgainstDiff(repo)
+	if res.Status != "violated" {
+		t.Fatalf("expected violated, got %+v", res)
+	}
+	if len(res.MissingDeliverables) != 1 {
+		t.Fatalf("expected one missing deliverable, got %v", res.MissingDeliverables)
+	}
+	want := "packages/db/prisma/migrations/<timestamp>_init_multitenant_pgvector/migration.sql"
+	if res.MissingDeliverables[0] != want {
+		t.Fatalf("expected original placeholder path %q, got %q", want, res.MissingDeliverables[0])
+	}
+}
 func TestParseSizeFromHashSection(t *testing.T) {
 	cases := map[string]Size{
 		"small":  SizeSmall,
